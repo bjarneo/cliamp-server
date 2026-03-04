@@ -140,6 +140,12 @@ func main() {
 		slog.Info("geo database loaded", "path", cfg.Geo.DBPath)
 	}
 
+	if cfg.Admin.Password != "" {
+		slog.Info("admin password protection enabled")
+	} else {
+		slog.Warn("admin password not set, status endpoints are public")
+	}
+
 	// Create and start HTTP server
 	srv := server.New(cfg, stations, geoDB)
 
