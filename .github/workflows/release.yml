@@ -17,12 +17,6 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-          - goos: windows
-            goarch: amd64
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -40,9 +34,6 @@ jobs:
           CGO_ENABLED: "0"
         run: |
           BINARY="cliamp-server-${GOOS}-${GOARCH}"
-          if [ "$GOOS" = "windows" ]; then
-            BINARY="${BINARY}.exe"
-          fi
           VERSION="${GITHUB_REF#refs/tags/}"
           go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "$BINARY" .
 
