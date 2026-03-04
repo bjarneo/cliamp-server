@@ -52,7 +52,7 @@ docker run -d -v /path/to/music:/music:ro -p 8000:8000 cliamp-server --music /mu
 - [Configuration](docs/configuration.md) — CLI flags, TOML config, station options
 - [API](docs/api.md) — Stream endpoints, status endpoints, response format
 - [Features](docs/features.md) — Audio format support, ad scheduling, GeoIP
-- [Docker](docs/docker.md) — Building, running, and volume reference
+- [Deployment](docs/docker.md) — Docker, nginx reverse proxy
 
 ## License
 

@@ -19,6 +19,7 @@ There are two ways to configure cliamp-server: CLI flags for a quick single stat
 | `--ads <path>` | Ads directory or single MP3 file | |
 | `--ad-every-songs <n>` | Insert an ad after every N songs | 0 (off) |
 | `--ad-every-minutes <n>` | Insert an ad after every N minutes | 0 (off) |
+| `--password <token>` | Admin password for /status endpoints | |
 | `--geo-db <path>` | Path to MaxMind GeoLite2-City.mmdb file | |
 | `--log-level <level>` | Log level: debug, info, warn, error | info |
 
