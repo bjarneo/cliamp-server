@@ -51,7 +51,6 @@ docker run -d -v /path/to/music:/music:ro -p 8000:8000 cliamp-server --music /mu
 - [API](docs/api.md) — Stream endpoints, status endpoints, response format
 - [Features](docs/features.md) — Audio format support, ad scheduling, GeoIP
 - [Docker](docs/docker.md) — Building, running, and volume reference
-- [Architecture](docs/architecture.md) — How streaming works, project structure
 
 ## License
 
