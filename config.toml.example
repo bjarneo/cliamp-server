@@ -1,0 +1,45 @@
+[server]
+# Bind address
+host = "0.0.0.0"
+# Listen port
+port = 8000
+
+[stream]
+# ICY metadata interval in bytes (standard: 8192)
+metaint = 8192
+# Ring buffer size in KB (512 ≈ 32s of 128kbps audio)
+buffer_size = 512
+
+[admin]
+# Password for /status endpoint (empty = open)
+password = ""
+
+[log]
+# debug, info, warn, error
+level = "info"
+
+# Each [stations.<id>] block creates a station at /<id>/stream
+# Example: [stations.pop] → /pop/stream, /pop/stream.pls, /pop/status
+
+[stations.pop]
+name = "Pop Station"
+description = "Pop Music 24/7"
+genre = "Pop"
+url = ""
+path = "/music/pop"
+shuffle = true
+recursive = true
+# intro_file = "/radio/assets/intro.mp3"     # MP3 played once at station start
+# ads_path = "/radio/ads"                     # Directory of ad MP3s (or single file)
+# ad_every_n_songs = 5                        # Inject ad after every N songs (0 = off)
+# ad_every_n_minutes = 15                     # Inject ad after every N minutes (0 = off)
+# ad_shuffle = true                           # Randomize ad order (false = round-robin)
+
+[stations.jazz]
+name = "Jazz Station"
+description = "Smooth Jazz"
+genre = "Jazz"
+url = ""
+path = "/music/jazz"
+shuffle = true
+recursive = true
