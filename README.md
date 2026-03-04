@@ -4,6 +4,8 @@ An internet radio streaming server written in Go. Shoutcast/ICY compatible, mult
 
 Point it at a directory of audio files and it starts broadcasting.
 
+Looking for the client? See [cliamp](https://github.com/bjarneo/cliamp).
+
 ## Quick Start
 
 ```
