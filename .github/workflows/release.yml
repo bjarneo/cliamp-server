@@ -1,0 +1,112 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          BINARY="cliamp-server-${GOOS}-${GOARCH}"
+          if [ "$GOOS" = "windows" ]; then
+            BINARY="${BINARY}.exe"
+          fi
+          VERSION="${GITHUB_REF#refs/tags/}"
+          go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "$BINARY" .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cliamp-server-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: cliamp-server-*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum cliamp-server-* > checksums.txt
+          cat checksums.txt
+
+      - name: Generate changelog
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+
+          PREV_TAG=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s (%h)" "$TAG")
+          else
+            COMMITS=$(git log --pretty=format:"- %s (%h)" "${PREV_TAG}..${TAG}")
+          fi
+
+          {
+            echo "## What's Changed"
+            echo ""
+            echo "$COMMITS"
+            echo ""
+            echo "## Checksums (SHA256)"
+            echo ""
+            echo '```'
+            cat artifacts/checksums.txt
+            echo '```'
+            echo ""
+            if [ -n "$PREV_TAG" ]; then
+              echo "**Full Changelog**: https://github.com/${REPO}/compare/${PREV_TAG}...${TAG}"
+            fi
+          } > release_notes.md
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release_notes.md
+          files: |
+            artifacts/cliamp-server-*
+            artifacts/checksums.txt
