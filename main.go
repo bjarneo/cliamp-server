@@ -34,7 +34,7 @@ func raiseFileLimit() {
 }
 
 func main() {
-	cfg, err := config.Load()
+	cfg, err := config.Load(config.ConfigPathFromArgs())
 	if err != nil {
 		slog.Error("failed to load config", "error", err)
 		os.Exit(1)

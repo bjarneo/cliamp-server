@@ -75,18 +75,23 @@ func Defaults() *Config {
 	}
 }
 
-func Load() (*Config, error) {
+// Load reads the config file. If configPath is non-empty, it reads that file
+// directly. Otherwise it falls back to ~/.config/cliamp-server/config.toml.
+func Load(configPath string) (*Config, error) {
 	cfg := Defaults()
 
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return cfg, nil
+	path := configPath
+	if path == "" {
+		configDir, err := os.UserConfigDir()
+		if err != nil {
+			return cfg, nil
+		}
+		path = filepath.Join(configDir, "cliamp-server", "config.toml")
 	}
 
-	path := filepath.Join(configDir, "cliamp-server", "config.toml")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) && configPath == "" {
 			return cfg, nil
 		}
 		return nil, fmt.Errorf("reading config: %w", err)

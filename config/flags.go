@@ -20,6 +20,7 @@ Quick start (single station at /radio/stream):
 For multiple stations, use a config file with [stations.*] sections.
 
 Flags:
+  --config <path>           Path to TOML config file
   --music <path>            Path to MP3 directory (creates station "radio")
   --port <port>             Listen port (default: 8000)
   --shuffle                 Enable shuffle mode
@@ -36,6 +37,21 @@ Flags:
   -h, --help                Show this help
   -v, --version             Show version
 `, Version)
+}
+
+// ConfigPathFromArgs pre-scans CLI args for --config before the config file
+// is loaded. Returns the path if found, or empty string for the default.
+func ConfigPathFromArgs() string {
+	args := os.Args[1:]
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--config" {
+			i++
+			if i < len(args) {
+				return args[i]
+			}
+		}
+	}
+	return ""
 }
 
 func ParseFlags(cfg *Config) (exit bool) {
@@ -55,6 +71,8 @@ func ParseFlags(cfg *Config) (exit bool) {
 		case "-v", "--version":
 			fmt.Printf("cliamp-server v%s\n", Version)
 			return true
+		case "--config":
+			i++ // already handled by ConfigPathFromArgs
 		case "--music":
 			i++
 			if i >= len(args) {
