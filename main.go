@@ -16,6 +16,23 @@ import (
 	"cliamp-server/server"
 )
 
+// raiseFileLimit raises the soft file-descriptor limit to the hard limit.
+// Each connected listener holds one socket, so the default soft limit of
+// 1024 caps the server at roughly 1000 simultaneous listeners.
+func raiseFileLimit() {
+	var rlimit syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlimit); err != nil {
+		return
+	}
+	if rlimit.Cur < rlimit.Max {
+		prev := rlimit.Cur
+		rlimit.Cur = rlimit.Max
+		if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rlimit); err == nil {
+			slog.Info("raised file descriptor limit", "from", prev, "to", rlimit.Max)
+		}
+	}
+}
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -40,6 +57,8 @@ func main() {
 		level = slog.LevelInfo
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
+
+	raiseFileLimit()
 
 	// Validate config
 	if err := cfg.Validate(); err != nil {
@@ -97,7 +116,7 @@ func main() {
 			slog.Info("scheduler enabled", "station", id)
 		}
 
-		hub := broadcast.NewHub(source, cfg.Stream.BufferSize)
+		hub := broadcast.NewHub(source, cfg.Stream.BufferSize, cfg.Stream.MaxListeners)
 
 		go hub.Run(ctx)
 

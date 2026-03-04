@@ -91,7 +91,11 @@ func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Register listener and join live broadcast
-	listener := s.Hub.AddListener(wantMeta, info)
+	listener, err := s.Hub.AddListener(wantMeta, info)
+	if err != nil {
+		http.Error(w, "Server Full", http.StatusServiceUnavailable)
+		return
+	}
 	defer s.Hub.RemoveListener(listener)
 
 	// Stream audio from ring buffer

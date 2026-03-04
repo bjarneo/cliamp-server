@@ -31,9 +31,10 @@ type Hub struct {
 	ring   *RingBuffer
 	source playlist.TrackSource
 
-	mu        sync.Mutex
-	listeners map[int64]*Listener
-	nextID    int64
+	mu           sync.Mutex
+	listeners    map[int64]*Listener
+	nextID       int64
+	maxListeners int // 0 = unlimited
 
 	currentTrack  atomic.Value // stores TrackInfo
 	listenerCount atomic.Int64
@@ -43,12 +44,13 @@ type Hub struct {
 	SampleRate int
 }
 
-// NewHub creates a broadcast hub.
-func NewHub(source playlist.TrackSource, bufferSizeKB int) *Hub {
+// NewHub creates a broadcast hub. maxListeners of 0 means unlimited.
+func NewHub(source playlist.TrackSource, bufferSizeKB, maxListeners int) *Hub {
 	h := &Hub{
-		ring:      NewRingBuffer(bufferSizeKB * 1024),
-		source:    source,
-		listeners: make(map[int64]*Listener),
+		ring:         NewRingBuffer(bufferSizeKB * 1024),
+		source:       source,
+		listeners:    make(map[int64]*Listener),
+		maxListeners: maxListeners,
 	}
 	h.currentTrack.Store(TrackInfo{})
 	return h
@@ -184,9 +186,14 @@ func (h *Hub) streamTrack(ctx context.Context, pt preparedTrack) {
 }
 
 // AddListener registers a new listener and returns it.
-func (h *Hub) AddListener(wantMeta bool, info ListenerInfo) *Listener {
+// Returns ErrFull if the maximum listener count has been reached.
+func (h *Hub) AddListener(wantMeta bool, info ListenerInfo) (*Listener, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	if h.maxListeners > 0 && len(h.listeners) >= h.maxListeners {
+		return nil, ErrFull
+	}
 
 	id := h.nextID
 	h.nextID++
@@ -197,7 +204,7 @@ func (h *Hub) AddListener(wantMeta bool, info ListenerInfo) *Listener {
 	h.listenerCount.Add(1)
 
 	slog.Info("listener connected", "id", id, "ip", info.IP, "total", h.listenerCount.Load())
-	return l
+	return l, nil
 }
 
 // ListenerSnapshot holds a point-in-time view of a listener for status reporting.

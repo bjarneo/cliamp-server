@@ -33,8 +33,9 @@ type StationConfig struct {
 }
 
 type StreamConfig struct {
-	MetaInt    int `toml:"metaint"`
-	BufferSize int `toml:"buffer_size"`
+	MetaInt      int `toml:"metaint"`
+	BufferSize   int `toml:"buffer_size"`
+	MaxListeners int `toml:"max_listeners"` // 0 = unlimited
 }
 
 type AdminConfig struct {

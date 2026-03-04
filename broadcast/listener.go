@@ -9,6 +9,9 @@ import (
 // ErrSlow is returned when a listener has fallen too far behind the writer.
 var ErrSlow = errors.New("listener too slow")
 
+// ErrFull is returned when the listener limit has been reached.
+var ErrFull = errors.New("listener limit reached")
+
 // ListenerInfo holds connection metadata for a listener.
 type ListenerInfo struct {
 	IP          string

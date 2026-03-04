@@ -29,6 +29,7 @@ Flags:
   --ads <path>              Ads directory or single MP3 file
   --ad-every-songs <n>      Play ad after every N songs (default: 0 = off)
   --ad-every-minutes <n>    Play ad after every N minutes (default: 0 = off)
+  --max-listeners <n>       Max concurrent listeners per station (0 = unlimited)
   --geo-db <path>           Path to MaxMind GeoLite2-City.mmdb file
   --log-level <level>       Log level (debug, info, warn, error)
   -h, --help                Show this help
@@ -123,6 +124,18 @@ func ParseFlags(cfg *Config) (exit bool) {
 				os.Exit(1)
 			}
 			adEveryMins = n
+		case "--max-listeners":
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(os.Stderr, "error: --max-listeners requires a number")
+				os.Exit(1)
+			}
+			n, err := strconv.Atoi(args[i])
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: invalid max-listeners: %s\n", args[i])
+				os.Exit(1)
+			}
+			cfg.Stream.MaxListeners = n
 		case "--geo-db":
 			i++
 			if i >= len(args) {
