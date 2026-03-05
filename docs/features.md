@@ -32,11 +32,12 @@ Both triggers reset after each ad plays.
 
 ## GeoIP
 
-Listener IP geolocation is powered by MaxMind's GeoLite2-City database. When configured, each connected listener's IP is resolved to a country, city, and coordinates, visible in the status JSON.
+Listener IP geolocation uses a `.mmdb` database. When configured, each connected listener's IP is resolved to a country, city, and coordinates, visible in the status JSON.
 
 To enable it:
 
-1. Download the GeoLite2-City.mmdb file from [MaxMind](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data)
-2. Set the path via `--geo-db /path/to/GeoLite2-City.mmdb` or in the config file under `[geo] db_path`
+1. Download the [DB-IP City Lite](https://download.db-ip.com/free/dbip-city-lite-2026-03.mmdb.gz) database (free, no signup)
+2. Unpack it: `gunzip dbip-city-lite-2026-03.mmdb.gz`
+3. Set the path via `--geo-db /path/to/dbip-city-lite-2026-03.mmdb` or in the config file under `[geo] db_path`
 
 Client IP is extracted from `X-Forwarded-For`, then `X-Real-IP`, then the connection's remote address. This works correctly behind reverse proxies that set these headers.
