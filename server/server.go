@@ -12,6 +12,7 @@ import (
 	"cliamp-server/config"
 	"cliamp-server/geo"
 	"cliamp-server/handler"
+	"cliamp-server/stats"
 )
 
 // Station holds the per-station runtime state.
@@ -30,7 +31,8 @@ type Server struct {
 
 // New creates a new server with all routes configured for multiple stations.
 // geoDB may be nil if no MaxMind database is configured.
-func New(cfg *config.Config, stations map[string]*Station, geoDB *geo.DB) *Server {
+// statsDB may be nil if statistics are not enabled.
+func New(cfg *config.Config, stations map[string]*Station, geoDB *geo.DB, statsDB *stats.DB) *Server {
 	s := &Server{
 		cfg:       cfg,
 		startTime: time.Now(),
@@ -70,6 +72,14 @@ func New(cfg *config.Config, stations map[string]*Station, geoDB *geo.DB) *Serve
 			StationName: st.Config.Name,
 		})
 
+		if statsDB != nil {
+			mux.Handle(prefix+"/statistics", &handler.Statistics{
+				Hub:     st.Hub,
+				StatsDB: statsDB,
+				Station: id,
+			})
+		}
+
 		slog.Info("station registered",
 			"id", id,
 			"name", st.Config.Name,
@@ -93,6 +103,20 @@ func New(cfg *config.Config, stations map[string]*Station, geoDB *geo.DB) *Serve
 		StartTime: s.startTime,
 		Password:  cfg.Admin.Password,
 	})
+
+	if statsDB != nil {
+		statsInfos := make(map[string]*handler.StationStatsInfo, len(stations))
+		for id, st := range stations {
+			statsInfos[id] = &handler.StationStatsInfo{
+				Hub: st.Hub,
+			}
+		}
+
+		mux.Handle("/statistics", &handler.GlobalStatistics{
+			Stations: statsInfos,
+			StatsDB:  statsDB,
+		})
+	}
 
 	s.httpServer = &http.Server{
 		Addr:              fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),

@@ -21,6 +21,7 @@ There are two ways to configure cliamp-server: CLI flags for a quick single stat
 | `--ad-every-minutes <n>` | Insert an ad after every N minutes | 0 (off) |
 | `--password <token>` | Admin password for /status endpoints | |
 | `--geo-db <path>` | Path to MaxMind GeoLite2-City.mmdb file | |
+| `--stats-db <path>` | Path to SQLite database for listener statistics | |
 | `--log-level <level>` | Log level: debug, info, warn, error | info |
 
 ## Config File
@@ -44,6 +45,9 @@ level = "info"
 
 [geo]
 db_path = ""         # Path to MaxMind GeoLite2-City.mmdb (optional)
+
+[stats]
+db_path = ""         # Path to SQLite database for listener statistics (optional)
 
 [stations.pop]
 name = "Pop Station"

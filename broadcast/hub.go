@@ -25,17 +25,23 @@ type TrackInfo struct {
 	Album  string
 }
 
+// DisconnectHook is called after a listener is removed from the hub.
+// It receives the station ID and a snapshot of the disconnected listener.
+type DisconnectHook func(stationID string, snap ListenerSnapshot, disconnectedAt time.Time)
+
 // Hub manages the broadcast: reads frames from the playlist, writes to the ring buffer,
 // and manages listener connections.
 type Hub struct {
 	ring   *RingBuffer
 	source playlist.TrackSource
 
-	mu           sync.Mutex
-	listeners    map[int64]*Listener
-	nextID       int64
-	maxListeners int // 0 = unlimited
+	mu             sync.Mutex
+	listeners      map[int64]*Listener
+	nextID         int64
+	maxListeners   int // 0 = unlimited
+	disconnectHook DisconnectHook
 
+	stationID     string
 	currentTrack  atomic.Value // stores TrackInfo
 	listenerCount atomic.Int64
 
@@ -45,15 +51,23 @@ type Hub struct {
 }
 
 // NewHub creates a broadcast hub. maxListeners of 0 means unlimited.
-func NewHub(source playlist.TrackSource, bufferSizeKB, maxListeners int) *Hub {
+func NewHub(stationID string, source playlist.TrackSource, bufferSizeKB, maxListeners int) *Hub {
 	h := &Hub{
 		ring:         NewRingBuffer(bufferSizeKB * 1024),
 		source:       source,
 		listeners:    make(map[int64]*Listener),
 		maxListeners: maxListeners,
+		stationID:    stationID,
 	}
 	h.currentTrack.Store(TrackInfo{})
 	return h
+}
+
+// SetDisconnectHook registers a callback fired after a listener is removed.
+func (h *Hub) SetDisconnectHook(hook DisconnectHook) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.disconnectHook = hook
 }
 
 // preparedTrack holds a track whose reader is already open and buffering.
@@ -233,14 +247,27 @@ func (h *Hub) Listeners() []ListenerSnapshot {
 // RemoveListener unregisters a listener.
 func (h *Hub) RemoveListener(l *Listener) {
 	l.Close()
+	now := time.Now()
+
+	snap := ListenerSnapshot{
+		ID:          l.ID,
+		Info:        l.Info,
+		ConnectedAt: l.ConnectedAt,
+	}
+
+	var hook DisconnectHook
 
 	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	delete(h.listeners, l.ID)
 	h.listenerCount.Add(-1)
+	hook = h.disconnectHook
+	h.mu.Unlock()
 
 	slog.Info("listener disconnected", "id", l.ID, "total", h.listenerCount.Load())
+
+	if hook != nil {
+		hook(h.stationID, snap, now)
+	}
 }
 
 // ListenerCount returns the current number of connected listeners.

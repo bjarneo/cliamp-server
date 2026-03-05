@@ -62,7 +62,7 @@ func TestRingBufferConcurrentReaders(t *testing.T) {
 
 func TestRingBufferErrFull(t *testing.T) {
 	source := &fakeSource{}
-	hub := NewHub(source, 64, 2)
+	hub := NewHub("test", source, 64, 2)
 
 	info := ListenerInfo{IP: "127.0.0.1"}
 

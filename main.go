@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"cliamp-server/broadcast"
 	"cliamp-server/config"
@@ -14,6 +15,7 @@ import (
 	"cliamp-server/playlist"
 	"cliamp-server/scheduler"
 	"cliamp-server/server"
+	"cliamp-server/stats"
 )
 
 // raiseFileLimit raises the soft file-descriptor limit to the hard limit.
@@ -116,7 +118,7 @@ func main() {
 			slog.Info("scheduler enabled", "station", id)
 		}
 
-		hub := broadcast.NewHub(source, cfg.Stream.BufferSize, cfg.Stream.MaxListeners)
+		hub := broadcast.NewHub(id, source, cfg.Stream.BufferSize, cfg.Stream.MaxListeners)
 
 		go hub.Run(ctx)
 
@@ -140,6 +142,41 @@ func main() {
 		slog.Info("geo database loaded", "path", cfg.Geo.DBPath)
 	}
 
+	// Open optional statistics database
+	var statsDB *stats.DB
+	if cfg.Stats.DBPath != "" {
+		var err error
+		statsDB, err = stats.Open(cfg.Stats.DBPath)
+		if err != nil {
+			slog.Error("failed to open stats database", "path", cfg.Stats.DBPath, "error", err)
+			os.Exit(1)
+		}
+		defer statsDB.Close()
+		slog.Info("statistics database loaded", "path", cfg.Stats.DBPath)
+
+		// Wire disconnect hooks to record sessions
+		for _, st := range stations {
+			st.Hub.SetDisconnectHook(func(stationID string, snap broadcast.ListenerSnapshot, disconnectedAt time.Time) {
+				dur := int64(disconnectedAt.Sub(snap.ConnectedAt).Seconds())
+				if err := statsDB.Record(stats.Session{
+					Station:         stationID,
+					Country:         snap.Info.Country,
+					CountryCode:     snap.Info.CountryCode,
+					City:            snap.Info.City,
+					Latitude:        snap.Info.Latitude,
+					Longitude:       snap.Info.Longitude,
+					ConnectedAt:     snap.ConnectedAt,
+					DisconnectedAt:  disconnectedAt,
+					DurationSeconds: dur,
+				}); err != nil {
+					slog.Error("failed to record listener session", "station", stationID, "error", err)
+				}
+			})
+		}
+	} else {
+		slog.Info("statistics disabled (no --stats-db configured)")
+	}
+
 	if cfg.Admin.Password != "" {
 		slog.Info("admin password protection enabled")
 	} else {
@@ -147,7 +184,7 @@ func main() {
 	}
 
 	// Create and start HTTP server
-	srv := server.New(cfg, stations, geoDB)
+	srv := server.New(cfg, stations, geoDB, statsDB)
 
 	// Graceful shutdown on SIGINT/SIGTERM
 	go func() {

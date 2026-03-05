@@ -81,3 +81,55 @@ curl -H "Authorization: Bearer yourpassword" http://localhost:8000/status
   "uptime_seconds": 19845
 }
 ```
+
+## Statistics Endpoints
+
+Available when `--stats-db` is configured. These are **public** (no password required) and contain no IP addresses.
+
+| Endpoint | Description |
+|----------|-------------|
+| `/<id>/statistics` | Aggregated listener statistics for a single station |
+| `/statistics` | Aggregated listener statistics for all stations |
+
+```
+curl http://localhost:8000/radio/statistics
+curl http://localhost:8000/statistics
+```
+
+### Per-Station Statistics Response
+
+```json
+{
+  "total_sessions": 8234,
+  "total_listen_hours": 2810.3,
+  "active_listeners": 42,
+  "top_countries": [
+    { "country": "Norway", "country_code": "NO", "sessions": 3200, "listen_hours": 1100.2 }
+  ],
+  "top_cities": [
+    { "city": "Oslo", "country_code": "NO", "sessions": 800, "listen_hours": 280.5 }
+  ],
+  "daily": [
+    { "date": "2026-03-05", "sessions": 150, "listen_hours": 48.2 }
+  ]
+}
+```
+
+### Global Statistics Response
+
+```json
+{
+  "total_sessions": 12847,
+  "total_listen_hours": 4231.5,
+  "stations": {
+    "pop": {
+      "total_sessions": 8234,
+      "total_listen_hours": 2810.3,
+      "active_listeners": 42,
+      "top_countries": [],
+      "top_cities": [],
+      "daily": []
+    }
+  }
+}
+```

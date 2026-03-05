@@ -41,3 +41,16 @@ To enable it:
 3. Set the path via `--geo-db /path/to/dbip-city-lite-2026-03.mmdb` or in the config file under `[geo] db_path`
 
 Client IP is extracted from `X-Forwarded-For`, then `X-Real-IP`, then the connection's remote address. This works correctly behind reverse proxies that set these headers.
+
+## Listener Statistics
+
+When a SQLite database path is configured, the server records each listener session on disconnect. No IP addresses are stored — only geo information (country, city, coordinates), connection times, and duration.
+
+To enable it:
+
+1. Pass `--stats-db /path/to/stats.db` or set `[stats] db_path` in the config file
+2. The database file is created automatically; the parent directory must exist
+
+The public `/statistics` and `/<id>/statistics` endpoints return aggregated data: total sessions, listen hours, top 10 countries, top 10 cities, and a daily breakdown for the last 30 days. These endpoints require no authentication.
+
+Statistics work best when combined with GeoIP — without it, country and city fields will be empty.

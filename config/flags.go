@@ -33,6 +33,7 @@ Flags:
   --max-listeners <n>       Max concurrent listeners per station (0 = unlimited)
   --password <token>        Admin password for /status endpoints
   --geo-db <path>           Path to MaxMind GeoLite2-City.mmdb file
+  --stats-db <path>         Path to SQLite database for listener statistics
   --log-level <level>       Log level (debug, info, warn, error)
   -h, --help                Show this help
   -v, --version             Show version
@@ -169,6 +170,13 @@ func ParseFlags(cfg *Config) (exit bool) {
 				os.Exit(1)
 			}
 			cfg.Geo.DBPath = args[i]
+		case "--stats-db":
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(os.Stderr, "error: --stats-db requires a path")
+				os.Exit(1)
+			}
+			cfg.Stats.DBPath = args[i]
 		case "--log-level":
 			i++
 			if i >= len(args) {

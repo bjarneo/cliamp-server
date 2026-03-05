@@ -1,6 +1,6 @@
 # cliamp-server
 
-An internet radio streaming server written in Go. Shoutcast/ICY compatible, multi-station, live metadata, on-the-fly transcoding, ad injection, and GeoIP tracking.
+An internet radio streaming server written in Go. Shoutcast/ICY compatible, multi-station, live metadata, on-the-fly transcoding, ad injection, GeoIP tracking, and listener statistics.
 
 Point it at a directory of audio files and it starts broadcasting.
 
@@ -51,7 +51,7 @@ docker run -d -v /path/to/music:/music:ro -p 8000:8000 cliamp-server --music /mu
 
 - [Configuration](docs/configuration.md) — CLI flags, TOML config, station options
 - [API](docs/api.md) — Stream endpoints, status endpoints, response format
-- [Features](docs/features.md) — Audio format support, ad scheduling, GeoIP
+- [Features](docs/features.md) — Audio format support, ad scheduling, GeoIP, listener statistics
 - [Deployment](docs/docker.md) — Docker, nginx reverse proxy
 
 ## License

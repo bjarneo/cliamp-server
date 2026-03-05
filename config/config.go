@@ -50,12 +50,17 @@ type GeoConfig struct {
 	DBPath string `toml:"db_path"`
 }
 
+type StatsConfig struct {
+	DBPath string `toml:"db_path"`
+}
+
 type Config struct {
 	Server   ServerConfig             `toml:"server"`
 	Stream   StreamConfig             `toml:"stream"`
 	Admin    AdminConfig              `toml:"admin"`
 	Log      LogConfig                `toml:"log"`
 	Geo      GeoConfig                `toml:"geo"`
+	Stats    StatsConfig              `toml:"stats"`
 	Stations map[string]StationConfig `toml:"stations"`
 }
 
@@ -159,6 +164,13 @@ func (c *Config) Validate() error {
 	if c.Geo.DBPath != "" {
 		if _, err := os.Stat(c.Geo.DBPath); err != nil {
 			return fmt.Errorf("geo db_path %q: %w", c.Geo.DBPath, err)
+		}
+	}
+
+	if c.Stats.DBPath != "" {
+		dir := filepath.Dir(c.Stats.DBPath)
+		if _, err := os.Stat(dir); err != nil {
+			return fmt.Errorf("stats db_path parent directory %q: %w", dir, err)
 		}
 	}
 
