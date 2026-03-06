@@ -25,6 +25,8 @@ type statsResponse struct {
 }
 
 func (s *Statistics) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
 	result, err := s.StatsDB.StationStats(s.Station)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -82,6 +84,8 @@ type stationStatsPayload struct {
 }
 
 func (g *GlobalStatistics) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
 	allStats, err := g.StatsDB.AllStats()
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
