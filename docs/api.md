@@ -10,6 +10,7 @@ Each station exposes three endpoints under its ID prefix:
 | `/<id>/stream.pls` | `audio/x-scpls` | PLS playlist file pointing to the stream |
 | `/<id>/stream.m3u` | `audio/x-mpegurl` | M3U playlist file pointing to the stream |
 | `/streams.pls` | `audio/x-scpls` | PLS playlist file listing all stations |
+| `/streams.m3u` | `audio/x-mpegurl` | M3U playlist file listing all stations |
 
 The stream endpoint supports ICY metadata. Clients that send the `Icy-MetaData: 1` request header receive inline metadata blocks containing the current track title and artist.
 

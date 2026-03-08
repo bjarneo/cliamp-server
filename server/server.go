@@ -108,6 +108,15 @@ func New(cfg *config.Config, stations map[string]*Station, geoDB *geo.DB, statsD
 	}
 	mux.Handle("/streams.pls", &handler.GlobalPlaylistPLS{Stations: plsStations})
 
+	m3uStations := make([]handler.M3UStation, 0, len(stations))
+	for id, st := range stations {
+		m3uStations = append(m3uStations, handler.M3UStation{
+			Name:   st.Config.Name,
+			Prefix: id,
+		})
+	}
+	mux.Handle("/streams.m3u", &handler.GlobalPlaylistM3U{Stations: m3uStations})
+
 	mux.Handle("/status", &handler.GlobalStatus{
 		Stations:  stationInfos,
 		StartTime: s.startTime,
