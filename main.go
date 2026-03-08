@@ -154,10 +154,21 @@ func main() {
 		defer statsDB.Close()
 		slog.Info("statistics database loaded", "path", cfg.Stats.DBPath)
 
+		// Minimum session duration to filter out media-player probe connections
+		// that connect briefly to check stream metadata before the real playback.
+		minSession := int64(cfg.Stats.MinSession)
+		if minSession <= 0 {
+			minSession = 10
+		}
+
 		// Wire disconnect hooks to record sessions
 		for _, st := range stations {
 			st.Hub.SetDisconnectHook(func(stationID string, snap broadcast.ListenerSnapshot, disconnectedAt time.Time) {
 				dur := int64(disconnectedAt.Sub(snap.ConnectedAt).Seconds())
+				if dur < minSession {
+					slog.Debug("session too short, not recording", "station", stationID, "duration", dur, "min", minSession)
+					return
+				}
 				if err := statsDB.Record(stats.Session{
 					Station:         stationID,
 					Country:         snap.Info.Country,

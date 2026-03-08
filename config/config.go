@@ -51,7 +51,8 @@ type GeoConfig struct {
 }
 
 type StatsConfig struct {
-	DBPath string `toml:"db_path"`
+	DBPath     string `toml:"db_path"`
+	MinSession int    `toml:"min_session"` // Minimum session duration in seconds to record (default 10)
 }
 
 type Config struct {
