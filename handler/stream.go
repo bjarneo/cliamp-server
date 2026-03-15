@@ -26,6 +26,7 @@ var introSeen sync.Map
 // Stream handles GET /stream — the main audio stream endpoint.
 type Stream struct {
 	Hub       *broadcast.Hub
+	StationID string  // Unique station identifier (TOML key, e.g. "pop", "jazz")
 	MetaInt   int
 	Name      string
 	Genre     string
@@ -87,7 +88,7 @@ func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if ttl == 0 {
 			ttl = 2 * time.Hour
 		}
-		key := s.Name + ":" + ip
+		key := s.StationID + ":" + ip
 		playIntro := true
 		if v, ok := introSeen.Load(key); ok {
 			if time.Since(v.(time.Time)) < ttl {

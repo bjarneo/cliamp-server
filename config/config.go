@@ -64,6 +64,9 @@ type Config struct {
 	Geo      GeoConfig                `toml:"geo"`
 	Stats    StatsConfig              `toml:"stats"`
 	Stations map[string]StationConfig `toml:"stations"`
+
+	// StationOrder holds station IDs in the order they appear in the config file.
+	StationOrder []string `toml:"-"`
 }
 
 func Defaults() *Config {
@@ -104,8 +107,16 @@ func Load(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("reading config: %w", err)
 	}
 
-	if err := toml.Unmarshal(data, cfg); err != nil {
+	meta, err := toml.Decode(string(data), cfg)
+	if err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
+	}
+
+	// Extract station IDs in config-file order from the TOML metadata.
+	for _, key := range meta.Keys() {
+		if len(key) == 2 && key[0] == "stations" {
+			cfg.StationOrder = append(cfg.StationOrder, key[1])
+		}
 	}
 
 	return cfg, nil

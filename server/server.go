@@ -46,6 +46,7 @@ func New(cfg *config.Config, stations map[string]*Station, geoDB *geo.DB, statsD
 
 		mux.Handle(prefix+"/stream", &handler.Stream{
 			Hub:          st.Hub,
+			StationID:    id,
 			MetaInt:      cfg.Stream.MetaInt,
 			Name:         st.Config.Name,
 			Genre:        st.Config.Genre,
@@ -99,9 +100,10 @@ func New(cfg *config.Config, stations map[string]*Station, geoDB *geo.DB, statsD
 		}
 	}
 
-	// Global playlist with all stations
+	// Global playlist with all stations, ordered by config file order.
 	plsStations := make([]handler.PLSStation, 0, len(stations))
-	for id, st := range stations {
+	for _, id := range cfg.StationOrder {
+		st := stations[id]
 		plsStations = append(plsStations, handler.PLSStation{
 			Name:   st.Config.Name,
 			Prefix: id,
@@ -110,7 +112,8 @@ func New(cfg *config.Config, stations map[string]*Station, geoDB *geo.DB, statsD
 	mux.Handle("/streams.pls", &handler.GlobalPlaylistPLS{Stations: plsStations})
 
 	m3uStations := make([]handler.M3UStation, 0, len(stations))
-	for id, st := range stations {
+	for _, id := range cfg.StationOrder {
+		st := stations[id]
 		m3uStations = append(m3uStations, handler.M3UStation{
 			Name:   st.Config.Name,
 			Prefix: id,

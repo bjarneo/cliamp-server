@@ -210,6 +210,18 @@ func ParseFlags(cfg *Config) (exit bool) {
 			st.Genre = "Various"
 		}
 		cfg.Stations["radio"] = st
+
+		// Ensure "radio" appears in StationOrder if not already present.
+		found := false
+		for _, id := range cfg.StationOrder {
+			if id == "radio" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			cfg.StationOrder = append(cfg.StationOrder, "radio")
+		}
 	}
 
 	// Apply intro/ads flags to the "radio" station
