@@ -19,6 +19,10 @@ import (
 	"cliamp-server/transcode"
 )
 
+// introSeen tracks which IPs have heard which stream's intro.
+// Key: "streamName:IP", Value: time.Time of last intro play.
+var introSeen sync.Map
+
 // Stream handles GET /stream — the main audio stream endpoint.
 type Stream struct {
 	Hub       *broadcast.Hub
@@ -28,7 +32,6 @@ type Stream struct {
 	URL       string
 	IntroFile string  // Path to intro MP3 (empty = no intro)
 	GeoDB     *geo.DB // Optional MaxMind geo database (nil = no geo lookup)
-	introSeen    sync.Map       // IP → time.Time — when the client last heard the intro
 	IntroSeenTTL time.Duration  // How long to suppress intro replays (0 = 2h default)
 }
 
@@ -77,14 +80,16 @@ func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Play intro only on the initial connection — skip for clients that
 	// have already heard it (e.g. pause/resume causing a reconnect).
+	// Tracked per stream so switching stations still plays that station's intro.
 	// The suppression expires after IntroSeenTTL (default 2 hours).
 	if s.IntroFile != "" {
 		ttl := s.IntroSeenTTL
 		if ttl == 0 {
 			ttl = 2 * time.Hour
 		}
+		key := s.Name + ":" + ip
 		playIntro := true
-		if v, ok := s.introSeen.Load(ip); ok {
+		if v, ok := introSeen.Load(key); ok {
 			if time.Since(v.(time.Time)) < ttl {
 				playIntro = false
 			}
@@ -93,7 +98,7 @@ func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if !s.playIntro(ctx, w, writer) {
 				return // client disconnected during intro
 			}
-			s.introSeen.Store(ip, time.Now())
+			introSeen.Store(key, time.Now())
 		}
 	}
 
