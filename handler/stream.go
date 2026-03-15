@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cliamp-server/broadcast"
@@ -27,6 +28,8 @@ type Stream struct {
 	URL       string
 	IntroFile string  // Path to intro MP3 (empty = no intro)
 	GeoDB     *geo.DB // Optional MaxMind geo database (nil = no geo lookup)
+	introSeen    sync.Map       // IP → time.Time — when the client last heard the intro
+	IntroSeenTTL time.Duration  // How long to suppress intro replays (0 = 2h default)
 }
 
 func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -64,6 +67,7 @@ func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	ip := clientIP(r)
 
 	// Create ICY writer (reused across intro + broadcast for correct byte alignment)
 	var writer *icy.Writer
@@ -71,15 +75,29 @@ func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writer = icy.NewWriter(w, s.MetaInt)
 	}
 
-	// Play intro before joining live broadcast
+	// Play intro only on the initial connection — skip for clients that
+	// have already heard it (e.g. pause/resume causing a reconnect).
+	// The suppression expires after IntroSeenTTL (default 2 hours).
 	if s.IntroFile != "" {
-		if !s.playIntro(ctx, w, writer) {
-			return // client disconnected during intro
+		ttl := s.IntroSeenTTL
+		if ttl == 0 {
+			ttl = 2 * time.Hour
+		}
+		playIntro := true
+		if v, ok := s.introSeen.Load(ip); ok {
+			if time.Since(v.(time.Time)) < ttl {
+				playIntro = false
+			}
+		}
+		if playIntro {
+			if !s.playIntro(ctx, w, writer) {
+				return // client disconnected during intro
+			}
+			s.introSeen.Store(ip, time.Now())
 		}
 	}
 
 	// Build listener info from client IP and optional geo lookup
-	ip := clientIP(r)
 	info := broadcast.ListenerInfo{IP: ip}
 	if s.GeoDB != nil {
 		loc := s.GeoDB.Lookup(ip)

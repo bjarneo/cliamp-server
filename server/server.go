@@ -45,13 +45,14 @@ func New(cfg *config.Config, stations map[string]*Station, geoDB *geo.DB, statsD
 		prefix := "/" + id
 
 		mux.Handle(prefix+"/stream", &handler.Stream{
-			Hub:       st.Hub,
-			MetaInt:   cfg.Stream.MetaInt,
-			Name:      st.Config.Name,
-			Genre:     st.Config.Genre,
-			URL:       st.Config.URL,
-			IntroFile: st.Config.IntroFile,
-			GeoDB:     geoDB,
+			Hub:          st.Hub,
+			MetaInt:      cfg.Stream.MetaInt,
+			Name:         st.Config.Name,
+			Genre:        st.Config.Genre,
+			URL:          st.Config.URL,
+			IntroFile:    st.Config.IntroFile,
+			IntroSeenTTL: time.Duration(cfg.Stream.IntroSeenTTL) * time.Hour,
+			GeoDB:        geoDB,
 		})
 
 		mux.Handle(prefix+"/stream.pls", &handler.PlaylistPLS{
