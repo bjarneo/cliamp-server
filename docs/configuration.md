@@ -36,7 +36,7 @@ port = 8000
 [stream]
 metaint = 8192       # ICY metadata interval in bytes
 buffer_size = 512    # Ring buffer size in KB (512 ~ 32s of 128kbps audio)
-intro_seen_ttl = 2   # Hours before intro replays for the same IP (default 2)
+intro_seen_ttl = 48  # Hours before intro replays for the same IP (default 48)
 
 [admin]
 password = ""        # Bearer token for /status endpoints (empty = open)

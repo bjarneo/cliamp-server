@@ -33,7 +33,7 @@ type Stream struct {
 	URL       string
 	IntroFile string  // Path to intro MP3 (empty = no intro)
 	GeoDB     *geo.DB // Optional MaxMind geo database (nil = no geo lookup)
-	IntroSeenTTL time.Duration  // How long to suppress intro replays (0 = 2h default)
+	IntroSeenTTL time.Duration  // How long to suppress intro replays (0 = 48h default)
 }
 
 func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -82,11 +82,11 @@ func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Play intro only on the initial connection — skip for clients that
 	// have already heard it (e.g. pause/resume causing a reconnect).
 	// Tracked per stream so switching stations still plays that station's intro.
-	// The suppression expires after IntroSeenTTL (default 2 hours).
+	// The suppression expires after IntroSeenTTL (default 48 hours).
 	if s.IntroFile != "" {
 		ttl := s.IntroSeenTTL
 		if ttl == 0 {
-			ttl = 2 * time.Hour
+			ttl = 48 * time.Hour
 		}
 		key := s.StationID + ":" + ip
 		playIntro := true

@@ -36,7 +36,7 @@ type StreamConfig struct {
 	MetaInt      int `toml:"metaint"`
 	BufferSize   int `toml:"buffer_size"`
 	MaxListeners int `toml:"max_listeners"` // 0 = unlimited
-	IntroSeenTTL int `toml:"intro_seen_ttl"` // Hours before intro replays for same IP (default 2)
+	IntroSeenTTL int `toml:"intro_seen_ttl"` // Hours before intro replays for same IP (default 48)
 }
 
 type AdminConfig struct {
