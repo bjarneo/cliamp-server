@@ -2,7 +2,10 @@ package handler
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
+	"sort"
+	"time"
 
 	"cliamp-server/broadcast"
 	"cliamp-server/stats"
@@ -16,12 +19,13 @@ type Statistics struct {
 }
 
 type statsResponse struct {
-	TotalSessions    int64                `json:"total_sessions"`
-	TotalListenHours float64              `json:"total_listen_hours"`
-	ActiveListeners  int                  `json:"active_listeners"`
-	TopCountries     []stats.CountryStats `json:"top_countries"`
-	TopCities        []stats.CityStats    `json:"top_cities"`
-	Daily            []stats.DailyStats   `json:"daily"`
+	TotalSessions           int64                `json:"total_sessions"`
+	TotalListenHours        float64              `json:"total_listen_hours"`
+	ActiveListeners         int                  `json:"active_listeners"`
+	ActiveListenerCountries []stats.CountryStats `json:"active_listener_countries"`
+	TopCountries            []stats.CountryStats `json:"top_countries"`
+	TopCities               []stats.CityStats    `json:"top_cities"`
+	Daily                   []stats.DailyStats   `json:"daily"`
 }
 
 func (s *Statistics) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -34,12 +38,13 @@ func (s *Statistics) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := statsResponse{
-		TotalSessions:    result.TotalSessions,
-		TotalListenHours: result.TotalListenHours,
-		ActiveListeners:  s.Hub.ListenerCount(),
-		TopCountries:     result.TopCountries,
-		TopCities:        result.TopCities,
-		Daily:            result.Daily,
+		TotalSessions:           result.TotalSessions,
+		TotalListenHours:        result.TotalListenHours,
+		ActiveListeners:         s.Hub.ListenerCount(),
+		ActiveListenerCountries: activeListenerCountries(s.Hub.Listeners()),
+		TopCountries:            result.TopCountries,
+		TopCities:               result.TopCities,
+		Daily:                   result.Daily,
 	}
 
 	// Return empty slices instead of null in JSON.
@@ -75,12 +80,13 @@ type globalStatsResponse struct {
 }
 
 type stationStatsPayload struct {
-	TotalSessions    int64                `json:"total_sessions"`
-	TotalListenHours float64              `json:"total_listen_hours"`
-	ActiveListeners  int                  `json:"active_listeners"`
-	TopCountries     []stats.CountryStats `json:"top_countries"`
-	TopCities        []stats.CityStats    `json:"top_cities"`
-	Daily            []stats.DailyStats   `json:"daily"`
+	TotalSessions           int64                `json:"total_sessions"`
+	TotalListenHours        float64              `json:"total_listen_hours"`
+	ActiveListeners         int                  `json:"active_listeners"`
+	ActiveListenerCountries []stats.CountryStats `json:"active_listener_countries"`
+	TopCountries            []stats.CountryStats `json:"top_countries"`
+	TopCities               []stats.CityStats    `json:"top_cities"`
+	Daily                   []stats.DailyStats   `json:"daily"`
 }
 
 func (g *GlobalStatistics) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -123,15 +129,59 @@ func (g *GlobalStatistics) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		resp.TotalListenHours += st.TotalListenHours
 
 		resp.Stations[id] = stationStatsPayload{
-			TotalSessions:    st.TotalSessions,
-			TotalListenHours: st.TotalListenHours,
-			ActiveListeners:  info.Hub.ListenerCount(),
-			TopCountries:     countries,
-			TopCities:        cities,
-			Daily:            daily,
+			TotalSessions:           st.TotalSessions,
+			TotalListenHours:        st.TotalListenHours,
+			ActiveListeners:         info.Hub.ListenerCount(),
+			ActiveListenerCountries: activeListenerCountries(info.Hub.Listeners()),
+			TopCountries:            countries,
+			TopCities:               cities,
+			Daily:                   daily,
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+// activeListenerCountries aggregates current listener snapshots by country,
+// computing session count and listen hours for each.
+func activeListenerCountries(snaps []broadcast.ListenerSnapshot) []stats.CountryStats {
+	type acc struct {
+		country     string
+		countryCode string
+		sessions    int64
+		seconds     float64
+	}
+
+	now := time.Now()
+	byCode := make(map[string]*acc)
+
+	for _, s := range snaps {
+		if s.Info.Country == "" {
+			continue
+		}
+		a, ok := byCode[s.Info.CountryCode]
+		if !ok {
+			a = &acc{country: s.Info.Country, countryCode: s.Info.CountryCode}
+			byCode[s.Info.CountryCode] = a
+		}
+		a.sessions++
+		a.seconds += now.Sub(s.ConnectedAt).Seconds()
+	}
+
+	out := make([]stats.CountryStats, 0, len(byCode))
+	for _, a := range byCode {
+		out = append(out, stats.CountryStats{
+			Country:     a.country,
+			CountryCode: a.countryCode,
+			Sessions:    a.sessions,
+			ListenHours: math.Round(a.seconds/3600*10) / 10,
+		})
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Sessions > out[j].Sessions
+	})
+
+	return out
 }
