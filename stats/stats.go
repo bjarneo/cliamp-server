@@ -3,15 +3,28 @@ package stats
 import (
 	"database/sql"
 	"math"
+	"sync"
 	"time"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
 )
 
+const statsCacheTTL = 30 * time.Second
+
 // DB wraps a SQLite database for persisting listener session statistics.
 type DB struct {
 	db *sql.DB
+
+	cacheMu    sync.Mutex
+	cache      map[string]cachedStats
+	generation map[string]uint64
+	inflight   map[string]chan struct{}
+}
+
+type cachedStats struct {
+	result    *StationStatsResult
+	expiresAt time.Time
 }
 
 // Session holds the data recorded when a listener disconnects.
@@ -75,7 +88,12 @@ func Open(path string) (*DB, error) {
 		return nil, err
 	}
 
-	return &DB{db: db}, nil
+	return &DB{
+		db:         db,
+		cache:      make(map[string]cachedStats),
+		generation: make(map[string]uint64),
+		inflight:   make(map[string]chan struct{}),
+	}, nil
 }
 
 // Record inserts a completed listener session.
@@ -95,7 +113,15 @@ func (d *DB) Record(s Session) error {
 		s.DisconnectedAt.UTC().Format(time.RFC3339),
 		s.DurationSeconds,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	d.cacheMu.Lock()
+	d.generation[s.Station]++
+	delete(d.cache, s.Station)
+	d.cacheMu.Unlock()
+	return nil
 }
 
 // StationStatsResult holds aggregated statistics for a single station.
@@ -132,6 +158,40 @@ type DailyStats struct {
 
 // StationStats returns aggregated statistics for a single station.
 func (d *DB) StationStats(station string) (*StationStatsResult, error) {
+	for {
+		d.cacheMu.Lock()
+		if cached, ok := d.cache[station]; ok && time.Now().Before(cached.expiresAt) {
+			result := cloneStats(cached.result)
+			d.cacheMu.Unlock()
+			return result, nil
+		}
+		if done, ok := d.inflight[station]; ok {
+			d.cacheMu.Unlock()
+			<-done
+			continue
+		}
+		generation := d.generation[station]
+		done := make(chan struct{})
+		d.inflight[station] = done
+		d.cacheMu.Unlock()
+
+		result, err := d.stationStats(station)
+
+		d.cacheMu.Lock()
+		delete(d.inflight, station)
+		if err == nil && d.generation[station] == generation {
+			d.cache[station] = cachedStats{
+				result:    cloneStats(result),
+				expiresAt: time.Now().Add(statsCacheTTL),
+			}
+		}
+		close(done)
+		d.cacheMu.Unlock()
+		return result, err
+	}
+}
+
+func (d *DB) stationStats(station string) (*StationStatsResult, error) {
 	result := &StationStatsResult{}
 
 	// Totals
@@ -163,6 +223,19 @@ func (d *DB) StationStats(station string) (*StationStatsResult, error) {
 	}
 
 	return result, nil
+}
+
+func cloneStats(in *StationStatsResult) *StationStatsResult {
+	if in == nil {
+		return nil
+	}
+	return &StationStatsResult{
+		TotalSessions:    in.TotalSessions,
+		TotalListenHours: in.TotalListenHours,
+		TopCountries:     append([]CountryStats(nil), in.TopCountries...),
+		TopCities:        append([]CityStats(nil), in.TopCities...),
+		Daily:            append([]DailyStats(nil), in.Daily...),
+	}
 }
 
 // AllStats returns aggregated statistics for stationIDs, keyed by station ID.

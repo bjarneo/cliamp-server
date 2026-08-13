@@ -142,3 +142,37 @@ func TestStationStats(t *testing.T) {
 		t.Errorf("AllStats() = %#v, want lofi only", all)
 	}
 }
+
+func TestRecordInvalidatesStationStatsCache(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "stats.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC()
+	first := Session{
+		Station: "lofi", ConnectedAt: now.Add(-time.Hour), DisconnectedAt: now, DurationSeconds: 3600,
+	}
+	if err := db.Record(first); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.StationStats("lofi"); err != nil {
+		t.Fatal(err)
+	}
+
+	second := first
+	second.ConnectedAt = now.Add(-2 * time.Hour)
+	second.DisconnectedAt = now.Add(-time.Hour)
+	if err := db.Record(second); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := db.StationStats("lofi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TotalSessions != 2 {
+		t.Errorf("TotalSessions = %d, want 2 after cache invalidation", got.TotalSessions)
+	}
+}
