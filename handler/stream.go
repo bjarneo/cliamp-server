@@ -23,17 +23,23 @@ import (
 // Key: "streamName:IP", Value: time.Time of last intro play.
 var introSeen sync.Map
 
+const (
+	streamWriteBufferSize = 4096
+	streamFlushBytes      = 1024
+	streamFlushInterval   = 50 * time.Millisecond
+)
+
 // Stream handles GET /stream — the main audio stream endpoint.
 type Stream struct {
-	Hub       *broadcast.Hub
-	StationID string  // Unique station identifier (TOML key, e.g. "pop", "jazz")
-	MetaInt   int
-	Name      string
-	Genre     string
-	URL       string
-	IntroFile string  // Path to intro MP3 (empty = no intro)
-	GeoDB     *geo.DB // Optional MaxMind geo database (nil = no geo lookup)
-	IntroSeenTTL time.Duration  // How long to suppress intro replays (0 = 48h default)
+	Hub          *broadcast.Hub
+	StationID    string // Unique station identifier (TOML key, e.g. "pop", "jazz")
+	MetaInt      int
+	Name         string
+	Genre        string
+	URL          string
+	IntroFile    string        // Path to intro MP3 (empty = no intro)
+	GeoDB        *geo.DB       // Optional MaxMind geo database (nil = no geo lookup)
+	IntroSeenTTL time.Duration // How long to suppress intro replays (0 = 48h default)
 }
 
 func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -124,17 +130,15 @@ func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Stream audio from ring buffer
 	ring := s.Hub.Ring()
-	buf := make([]byte, 4096)
+	buf := make([]byte, streamWriteBufferSize)
 	var lastTitle string
 
 	flusher, _ := w.(http.Flusher)
 	rc := http.NewResponseController(w)
 
-	// Batch writes instead of flushing every ~400-byte frame.  Flushing
-	// per-frame creates 38 tiny TCP packets/sec; batching into ~4KB
-	// chunks (~4 flushes/sec at 128kbps) gives the client larger, more
-	// regular bursts it can buffer ahead with — similar to how Icecast
-	// delivers data.
+	// Batch writes instead of flushing every MP3 frame, while keeping the
+	// delivery cadence below typical client output-buffer sizes. At 128 kbps,
+	// 1 KB is about 64 ms of audio.
 	unflushed := 0
 	lastFlush := time.Now()
 
@@ -177,7 +181,7 @@ func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		unflushed += n
-		if flusher != nil && (unflushed >= 4096 || time.Since(lastFlush) >= 500*time.Millisecond) {
+		if flusher != nil && (unflushed >= streamFlushBytes || time.Since(lastFlush) >= streamFlushInterval) {
 			flusher.Flush()
 			unflushed = 0
 			lastFlush = time.Now()
