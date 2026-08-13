@@ -8,13 +8,12 @@ import (
 )
 
 func TestRingBufferConcurrentReaders(t *testing.T) {
-	rb := NewRingBuffer(64 * 1024)
-
 	const (
 		numReaders = 100
 		numFrames  = 500
 		frameSize  = 417 // typical MP3 frame at 128kbps
 	)
+	rb := NewRingBuffer(numFrames * frameSize)
 
 	// Write a frame to get an initial position.
 	frame := make([]byte, frameSize)

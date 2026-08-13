@@ -57,6 +57,24 @@ func Open(path string) (*DB, error) {
 		return nil, err
 	}
 
+	// These indexes cover the per-station aggregates used by the public
+	// statistics endpoints. Without them, every request scans the full history.
+	const indexes = `
+		CREATE INDEX IF NOT EXISTS idx_listener_sessions_station_connected_at
+		ON listener_sessions (station, connected_at, duration_seconds);
+
+		CREATE INDEX IF NOT EXISTS idx_listener_sessions_station_country
+		ON listener_sessions (station, country, country_code, duration_seconds)
+		WHERE country != '';
+
+		CREATE INDEX IF NOT EXISTS idx_listener_sessions_station_city
+		ON listener_sessions (station, city, country_code, duration_seconds)
+		WHERE city != '';`
+	if _, err := db.Exec(indexes); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	return &DB{db: db}, nil
 }
 
@@ -82,11 +100,11 @@ func (d *DB) Record(s Session) error {
 
 // StationStatsResult holds aggregated statistics for a single station.
 type StationStatsResult struct {
-	TotalSessions   int64            `json:"total_sessions"`
-	TotalListenHours float64         `json:"total_listen_hours"`
-	TopCountries    []CountryStats   `json:"top_countries"`
-	TopCities       []CityStats      `json:"top_cities"`
-	Daily           []DailyStats     `json:"daily"`
+	TotalSessions    int64          `json:"total_sessions"`
+	TotalListenHours float64        `json:"total_listen_hours"`
+	TopCountries     []CountryStats `json:"top_countries"`
+	TopCities        []CityStats    `json:"top_cities"`
+	Daily            []DailyStats   `json:"daily"`
 }
 
 // CountryStats holds aggregated data for a country.
@@ -147,26 +165,8 @@ func (d *DB) StationStats(station string) (*StationStatsResult, error) {
 	return result, nil
 }
 
-// AllStats returns aggregated statistics across all stations, keyed by station ID.
-func (d *DB) AllStats() (map[string]*StationStatsResult, error) {
-	rows, err := d.db.Query(`SELECT DISTINCT station FROM listener_sessions`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var stationIDs []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		stationIDs = append(stationIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
+// AllStats returns aggregated statistics for stationIDs, keyed by station ID.
+func (d *DB) AllStats(stationIDs []string) (map[string]*StationStatsResult, error) {
 	result := make(map[string]*StationStatsResult, len(stationIDs))
 	for _, id := range stationIDs {
 		s, err := d.StationStats(id)

@@ -92,7 +92,11 @@ type stationStatsPayload struct {
 func (g *GlobalStatistics) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	allStats, err := g.StatsDB.AllStats()
+	stationIDs := make([]string, 0, len(g.Stations))
+	for id := range g.Stations {
+		stationIDs = append(stationIDs, id)
+	}
+	allStats, err := g.StatsDB.AllStats(stationIDs)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
