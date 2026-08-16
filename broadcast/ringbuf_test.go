@@ -93,6 +93,41 @@ func TestRingBufferErrFull(t *testing.T) {
 	hub.RemoveListener(l3)
 }
 
+func TestHubListenerChangeHook(t *testing.T) {
+	hub := NewHub("test", &fakeSource{}, 64, 2)
+	var changes []int
+	hub.SetListenerChangeHook(func(stationID string, delta int) {
+		if stationID != "test" {
+			t.Errorf("station ID = %q, want test", stationID)
+		}
+		changes = append(changes, delta)
+	})
+
+	listener, err := hub.AddListener(false, ListenerInfo{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hub.AddListener(false, ListenerInfo{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hub.AddListener(false, ListenerInfo{}); err != ErrFull {
+		t.Fatalf("AddListener() error = %v, want %v", err, ErrFull)
+	}
+
+	hub.RemoveListener(listener)
+	hub.RemoveListener(listener)
+
+	want := []int{1, 1, -1}
+	if len(changes) != len(want) {
+		t.Fatalf("listener changes = %v, want %v", changes, want)
+	}
+	for i, change := range changes {
+		if change != want[i] {
+			t.Errorf("listener change %d = %d, want %d", i, change, want[i])
+		}
+	}
+}
+
 // fakeSource satisfies playlist.TrackSource for tests.
 type fakeSource struct{}
 

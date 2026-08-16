@@ -21,6 +21,7 @@ type Statistics struct {
 type statsResponse struct {
 	TotalSessions           int64                `json:"total_sessions"`
 	TotalListenHours        float64              `json:"total_listen_hours"`
+	PeakListeners           int                  `json:"peak_listeners"`
 	ActiveListeners         int                  `json:"active_listeners"`
 	ActiveListenerCountries []stats.CountryStats `json:"active_listener_countries"`
 	TopCountries            []stats.CountryStats `json:"top_countries"`
@@ -40,6 +41,7 @@ func (s *Statistics) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp := statsResponse{
 		TotalSessions:           result.TotalSessions,
 		TotalListenHours:        result.TotalListenHours,
+		PeakListeners:           result.PeakListeners,
 		ActiveListeners:         s.Hub.ListenerCount(),
 		ActiveListenerCountries: activeListenerCountries(s.Hub.Listeners()),
 		TopCountries:            result.TopCountries,
@@ -76,12 +78,14 @@ type StationStatsInfo struct {
 type globalStatsResponse struct {
 	TotalSessions    int64                          `json:"total_sessions"`
 	TotalListenHours float64                        `json:"total_listen_hours"`
+	PeakListeners    int                            `json:"peak_listeners"`
 	Stations         map[string]stationStatsPayload `json:"stations"`
 }
 
 type stationStatsPayload struct {
 	TotalSessions           int64                `json:"total_sessions"`
 	TotalListenHours        float64              `json:"total_listen_hours"`
+	PeakListeners           int                  `json:"peak_listeners"`
 	ActiveListeners         int                  `json:"active_listeners"`
 	ActiveListenerCountries []stats.CountryStats `json:"active_listener_countries"`
 	TopCountries            []stats.CountryStats `json:"top_countries"`
@@ -101,9 +105,15 @@ func (g *GlobalStatistics) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	peakListeners, err := g.StatsDB.GlobalPeakListeners()
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 
 	resp := globalStatsResponse{
-		Stations: make(map[string]stationStatsPayload, len(g.Stations)),
+		PeakListeners: peakListeners,
+		Stations:      make(map[string]stationStatsPayload, len(g.Stations)),
 	}
 
 	for id, info := range g.Stations {
@@ -135,6 +145,7 @@ func (g *GlobalStatistics) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		resp.Stations[id] = stationStatsPayload{
 			TotalSessions:           st.TotalSessions,
 			TotalListenHours:        st.TotalListenHours,
+			PeakListeners:           st.PeakListeners,
 			ActiveListeners:         info.Hub.ListenerCount(),
 			ActiveListenerCountries: activeListenerCountries(info.Hub.Listeners()),
 			TopCountries:            countries,

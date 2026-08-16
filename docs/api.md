@@ -90,8 +90,8 @@ Available when `--stats-db` is configured. These are **public** (no password req
 
 | Endpoint | Description |
 |----------|-------------|
-| `/<id>/statistics` | Aggregated listener statistics for a single station |
-| `/statistics` | Aggregated listener statistics for all stations |
+| `/<id>/statistics` | Aggregated listener statistics for a single station, including its all-time listener high |
+| `/statistics` | Aggregated listener statistics for all stations, including the global all-time listener high |
 
 ```
 curl http://localhost:8000/radio/statistics
@@ -104,6 +104,7 @@ curl http://localhost:8000/statistics
 {
   "total_sessions": 8234,
   "total_listen_hours": 2810.3,
+  "peak_listeners": 68,
   "active_listeners": 42,
   "top_countries": [
     { "country": "Norway", "country_code": "NO", "sessions": 3200, "listen_hours": 1100.2 }
@@ -123,10 +124,12 @@ curl http://localhost:8000/statistics
 {
   "total_sessions": 12847,
   "total_listen_hours": 4231.5,
+  "peak_listeners": 86,
   "stations": {
     "pop": {
       "total_sessions": 8234,
       "total_listen_hours": 2810.3,
+      "peak_listeners": 68,
       "active_listeners": 42,
       "top_countries": [],
       "top_cities": [],

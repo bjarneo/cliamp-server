@@ -29,17 +29,22 @@ type TrackInfo struct {
 // It receives the station ID and a snapshot of the disconnected listener.
 type DisconnectHook func(stationID string, snap ListenerSnapshot, disconnectedAt time.Time)
 
+// ListenerChangeHook is called when a listener is added to or removed from the hub.
+// Delta is 1 for an addition and -1 for a removal.
+type ListenerChangeHook func(stationID string, delta int)
+
 // Hub manages the broadcast: reads frames from the playlist, writes to the ring buffer,
 // and manages listener connections.
 type Hub struct {
 	ring   *RingBuffer
 	source playlist.TrackSource
 
-	mu             sync.Mutex
-	listeners      map[int64]*Listener
-	nextID         int64
-	maxListeners   int // 0 = unlimited
-	disconnectHook DisconnectHook
+	mu                 sync.Mutex
+	listeners          map[int64]*Listener
+	nextID             int64
+	maxListeners       int // 0 = unlimited
+	disconnectHook     DisconnectHook
+	listenerChangeHook ListenerChangeHook
 
 	stationID     string
 	currentTrack  atomic.Value // stores TrackInfo
@@ -68,6 +73,13 @@ func (h *Hub) SetDisconnectHook(hook DisconnectHook) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.disconnectHook = hook
+}
+
+// SetListenerChangeHook registers a callback fired when a listener is added or removed.
+func (h *Hub) SetListenerChangeHook(hook ListenerChangeHook) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.listenerChangeHook = hook
 }
 
 // preparedTrack holds a track whose reader is already open and buffering.
@@ -214,6 +226,9 @@ func (h *Hub) AddListener(wantMeta bool, info ListenerInfo) (*Listener, error) {
 
 	pos := h.ring.PrerollPos()
 	l := NewListener(id, pos, wantMeta, info)
+	if h.listenerChangeHook != nil {
+		h.listenerChangeHook(h.stationID, 1)
+	}
 	h.listeners[id] = l
 	h.listenerCount.Add(1)
 
@@ -258,9 +273,16 @@ func (h *Hub) RemoveListener(l *Listener) {
 	var hook DisconnectHook
 
 	h.mu.Lock()
+	if _, ok := h.listeners[l.ID]; !ok {
+		h.mu.Unlock()
+		return
+	}
 	delete(h.listeners, l.ID)
 	h.listenerCount.Add(-1)
 	hook = h.disconnectHook
+	if h.listenerChangeHook != nil {
+		h.listenerChangeHook(h.stationID, -1)
+	}
 	h.mu.Unlock()
 
 	slog.Info("listener disconnected", "id", l.ID, "total", h.listenerCount.Load())

@@ -46,7 +46,7 @@ func TestOpenCreatesStatisticsIndexes(t *testing.T) {
 	}
 	defer db.Close()
 
-	rows, err := db.db.Query(`SELECT name FROM sqlite_master WHERE type = 'index' ORDER BY name`)
+	rows, err := db.db.Query(`SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_listener_sessions_%' ORDER BY name`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,5 +174,113 @@ func TestRecordInvalidatesStationStatsCache(t *testing.T) {
 	}
 	if got.TotalSessions != 2 {
 		t.Errorf("TotalSessions = %d, want 2 after cache invalidation", got.TotalSessions)
+	}
+}
+
+func TestOpenBackfillsListenerPeaks(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "stats.db")
+	legacy, err := sql.Open("sqlite3", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = legacy.Exec(`CREATE TABLE listener_sessions (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		station TEXT NOT NULL,
+		country TEXT NOT NULL DEFAULT '',
+		country_code TEXT NOT NULL DEFAULT '',
+		city TEXT NOT NULL DEFAULT '',
+		latitude REAL NOT NULL DEFAULT 0,
+		longitude REAL NOT NULL DEFAULT 0,
+		connected_at TEXT NOT NULL,
+		disconnected_at TEXT NOT NULL,
+		duration_seconds INTEGER NOT NULL
+	)`)
+	if err != nil {
+		legacy.Close()
+		t.Fatal(err)
+	}
+	for _, session := range []struct {
+		station      string
+		connectedAt  string
+		disconnected string
+	}{
+		{"lofi", "2026-01-01T01:00:00Z", "2026-01-01T03:00:00Z"},
+		{"lofi", "2026-01-01T02:00:00Z", "2026-01-01T04:00:00Z"},
+		{"jazz", "2026-01-01T02:30:00Z", "2026-01-01T03:30:00Z"},
+	} {
+		if _, err := legacy.Exec(
+			`INSERT INTO listener_sessions (station, connected_at, disconnected_at, duration_seconds) VALUES (?, ?, ?, 3600)`,
+			session.station,
+			session.connectedAt,
+			session.disconnected,
+		); err != nil {
+			legacy.Close()
+			t.Fatal(err)
+		}
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	lofiPeak, err := db.StationPeakListeners("lofi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lofiPeak != 2 {
+		t.Errorf("lofi peak listeners = %d, want 2", lofiPeak)
+	}
+	globalPeak, err := db.GlobalPeakListeners()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if globalPeak != 3 {
+		t.Errorf("global peak listeners = %d, want 3", globalPeak)
+	}
+}
+
+func TestPeakTrackerPersistsListenerHighs(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "stats.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	tracker, err := NewPeakTracker(db, []string{"lofi", "jazz"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, change := range []struct {
+		station string
+		delta   int
+	}{
+		{"lofi", 1},
+		{"jazz", 1},
+		{"lofi", -1},
+		{"jazz", -1},
+	} {
+		if err := tracker.Change(change.station, change.delta); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	lofiPeak, err := db.StationPeakListeners("lofi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lofiPeak != 1 {
+		t.Errorf("lofi peak listeners = %d, want 1", lofiPeak)
+	}
+	globalPeak, err := db.GlobalPeakListeners()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if globalPeak != 2 {
+		t.Errorf("global peak listeners = %d, want 2", globalPeak)
 	}
 }

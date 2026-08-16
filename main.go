@@ -154,6 +154,16 @@ func main() {
 		defer statsDB.Close()
 		slog.Info("statistics database loaded", "path", cfg.Stats.DBPath)
 
+		stationIDs := make([]string, 0, len(stations))
+		for id := range stations {
+			stationIDs = append(stationIDs, id)
+		}
+		peakTracker, err := stats.NewPeakTracker(statsDB, stationIDs)
+		if err != nil {
+			slog.Error("failed to initialize listener peak tracking", "error", err)
+			os.Exit(1)
+		}
+
 		// Minimum session duration to filter out media-player probe connections
 		// that connect briefly to check stream metadata before the real playback.
 		minSession := int64(cfg.Stats.MinSession)
@@ -163,6 +173,11 @@ func main() {
 
 		// Wire disconnect hooks to record sessions
 		for _, st := range stations {
+			st.Hub.SetListenerChangeHook(func(stationID string, delta int) {
+				if err := peakTracker.Change(stationID, delta); err != nil {
+					slog.Error("failed to record listener peak", "station", stationID, "error", err)
+				}
+			})
 			st.Hub.SetDisconnectHook(func(stationID string, snap broadcast.ListenerSnapshot, disconnectedAt time.Time) {
 				dur := int64(disconnectedAt.Sub(snap.ConnectedAt).Seconds())
 				if dur < minSession {

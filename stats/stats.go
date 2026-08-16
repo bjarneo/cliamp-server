@@ -69,6 +69,18 @@ func Open(path string) (*DB, error) {
 		db.Close()
 		return nil, err
 	}
+	const peakSchema = `CREATE TABLE IF NOT EXISTS listener_peaks (
+		scope          TEXT    PRIMARY KEY,
+		peak_listeners INTEGER NOT NULL
+	)`
+	if _, err := db.Exec(peakSchema); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := backfillListenerPeaks(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 
 	// These indexes cover the per-station aggregates used by the public
 	// statistics endpoints. Without them, every request scans the full history.
@@ -128,6 +140,7 @@ func (d *DB) Record(s Session) error {
 type StationStatsResult struct {
 	TotalSessions    int64          `json:"total_sessions"`
 	TotalListenHours float64        `json:"total_listen_hours"`
+	PeakListeners    int            `json:"peak_listeners"`
 	TopCountries     []CountryStats `json:"top_countries"`
 	TopCities        []CityStats    `json:"top_cities"`
 	Daily            []DailyStats   `json:"daily"`
@@ -203,6 +216,10 @@ func (d *DB) stationStats(station string) (*StationStatsResult, error) {
 		return nil, err
 	}
 	result.TotalListenHours = roundHours(result.TotalListenHours)
+	result.PeakListeners, err = d.StationPeakListeners(station)
+	if err != nil {
+		return nil, err
+	}
 
 	// Top 10 countries
 	result.TopCountries, err = d.topCountries(station)
@@ -232,6 +249,7 @@ func cloneStats(in *StationStatsResult) *StationStatsResult {
 	return &StationStatsResult{
 		TotalSessions:    in.TotalSessions,
 		TotalListenHours: in.TotalListenHours,
+		PeakListeners:    in.PeakListeners,
 		TopCountries:     append([]CountryStats(nil), in.TopCountries...),
 		TopCities:        append([]CityStats(nil), in.TopCities...),
 		Daily:            append([]DailyStats(nil), in.Daily...),
