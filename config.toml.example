@@ -7,7 +7,7 @@ port = 8000
 [stream]
 # ICY metadata interval in bytes (standard: 8192)
 metaint = 8192
-# Ring buffer size in KB (512 ≈ 32s of 128kbps audio)
+# Ring buffer size in KB (minimum 64; 512 is about 32s at 128kbps)
 buffer_size = 512
 
 [admin]
@@ -29,8 +29,8 @@ url = ""
 path = "/music/pop"
 shuffle = true
 recursive = true
-# intro_file = "/radio/assets/intro.mp3"     # MP3 played once at station start
-# ads_path = "/radio/ads"                     # Directory of ad MP3s (or single file)
+# intro_file = "/radio/assets/intro.mp3"     # Audio played once per listener
+# ads_path = "/radio/ads"                     # Directory of ads (or single audio file)
 # ad_every_n_songs = 5                        # Inject ad after every N songs (0 = off)
 # ad_every_n_minutes = 15                     # Inject ad after every N minutes (0 = off)
 # ad_shuffle = true                           # Randomize ad order (false = round-robin)

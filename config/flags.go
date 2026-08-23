@@ -6,28 +6,29 @@ import (
 	"strconv"
 )
 
-const Version = "0.1.0"
+// Version is overridden by the release build.
+var Version = "dev"
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `cliamp-server v%s — Internet Radio Streaming Server
+	fmt.Fprintf(os.Stderr, `cliamp-server v%s - Internet Radio Streaming Server
 
 Usage:
   cliamp-server [flags]
 
 Quick start (single station at /radio/stream):
-  cliamp-server --music /path/to/mp3s
+  cliamp-server --music /path/to/audio
 
 For multiple stations, use a config file with [stations.*] sections.
 
 Flags:
   --config <path>           Path to TOML config file
-  --music <path>            Path to MP3 directory (creates station "radio")
+  --music <path>            Path to audio directory (creates station "radio")
   --port <port>             Listen port (default: 8000)
   --shuffle                 Enable shuffle mode
   --no-shuffle              Disable shuffle mode
   --name <name>             Station name
-  --intro <path>            Intro MP3 file (played once at startup)
-  --ads <path>              Ads directory or single MP3 file
+  --intro <path>            Intro audio file (played once per listener)
+  --ads <path>              Ads directory or single audio file
   --ad-every-songs <n>      Play ad after every N songs (default: 0 = off)
   --ad-every-minutes <n>    Play ad after every N minutes (default: 0 = off)
   --max-listeners <n>       Max concurrent listeners per station (0 = unlimited)

@@ -2,11 +2,11 @@
 
 ## Audio Format Support
 
-MP3 files are streamed directly without processing. All other supported formats are transcoded to 128 kbps MP3 on the fly using ffmpeg:
+Every station emits one continuous 128 kbps, 44.1 kHz stereo MP3 stream. Source files are decoded to a fixed PCM profile and passed through a long-lived station encoder. This keeps track transitions gapless and prevents bitrate or sample-rate changes from interrupting players.
 
 | Format | Extension | Transcoded |
 |--------|-----------|------------|
-| MP3 | `.mp3` | No (native) |
+| MP3 | `.mp3` | Yes |
 | WAV | `.wav` | Yes |
 | FLAC | `.flac` | Yes |
 | OGG Vorbis | `.ogg` | Yes |
@@ -15,7 +15,7 @@ MP3 files are streamed directly without processing. All other supported formats 
 | WebM | `.webm` | Yes |
 | WMA | `.wma` | Yes |
 
-Transcoding requires `ffmpeg` with `libmp3lame` to be installed and available on `PATH`.
+Streaming requires `ffmpeg` with `libmp3lame` to be installed and available on `PATH`.
 
 Track metadata (title, artist, album) is read from ID3 tags. Files without tags fall back to the filename as the title.
 
@@ -26,7 +26,7 @@ Ads are injected between music tracks based on two independent triggers. Either 
 1. **Song count**: After every N music tracks (`ad_every_n_songs`)
 2. **Time interval**: After every N minutes (`ad_every_n_minutes`)
 
-Set `ads_path` to a directory of MP3 files or a single MP3 file. When `ad_shuffle` is true, ads are played in random order. When false, they rotate sequentially.
+Set `ads_path` to a directory of supported audio files or a single audio file. When `ad_shuffle` is true, ads are played in random order. When false, they rotate sequentially.
 
 Both triggers reset after each ad plays.
 

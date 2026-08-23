@@ -1,10 +1,14 @@
 package handler
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -54,15 +58,88 @@ func TestStreamFlushesContinuousAudioPromptly(t *testing.T) {
 				t.Fatal("continuous audio was not flushed within 150ms")
 			}
 
-			// RingBuffer.Read waits for a write, so wake it after cancelling the request.
 			cancel()
-			hub.Ring().Write(frame)
 			select {
 			case <-done:
 			case <-time.After(time.Second):
 				t.Fatal("stream handler did not exit after request cancellation")
 			}
 		})
+	}
+}
+
+func TestStreamUsesCloseDelimitedHTTP1(t *testing.T) {
+	hub := broadcast.NewHub("test", nil, 64, 0)
+	frame := bytes.Repeat([]byte{0x7f}, 417)
+	track := broadcast.TrackInfo{Title: "Test"}
+	hub.Ring().WriteFrame(frame, &track)
+	stream := &Stream{Hub: hub, MetaInt: 8192, Name: "Test"}
+	server := httptest.NewServer(stream)
+	defer server.Close()
+
+	host := strings.TrimPrefix(server.URL, "http://")
+	conn, err := net.DialTimeout("tcp", host, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if err := conn.SetDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	request := "GET / HTTP/1.1\r\nHost: " + host + "\r\nConnection: close\r\n\r\n"
+	if _, err := io.WriteString(conn, request); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := bufio.NewReader(conn)
+	status, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(status, " 200 ") {
+		t.Fatalf("status line = %q, want 200", status)
+	}
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatal(err)
+		}
+		if line == "\r\n" {
+			break
+		}
+		if strings.HasPrefix(strings.ToLower(line), "transfer-encoding:") {
+			t.Fatalf("unexpected HTTP transfer framing: %q", line)
+		}
+	}
+
+	body := make([]byte, len(frame))
+	if _, err := io.ReadFull(reader, body); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(body, frame) {
+		t.Fatalf("first body bytes contain HTTP framing")
+	}
+}
+
+func TestStreamRejectsFullStationBeforeStartingAudio(t *testing.T) {
+	hub := broadcast.NewHub("test", nil, 64, 1)
+	held, err := hub.AddListener(false, broadcast.ListenerInfo{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hub.RemoveListener(held)
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/stream", nil)
+	stream := &Stream{Hub: hub, MetaInt: 8192}
+	stream.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
+	}
+	if got := recorder.Body.String(); got != "Server Full\n" {
+		t.Fatalf("body = %q, want a plain capacity error", got)
 	}
 }
 

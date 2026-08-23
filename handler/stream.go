@@ -2,11 +2,11 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,11 +23,7 @@ import (
 // Key: "streamName:IP", Value: time.Time of last intro play.
 var introSeen sync.Map
 
-const (
-	streamWriteBufferSize = 4096
-	streamFlushBytes      = 1024
-	streamFlushInterval   = 50 * time.Millisecond
-)
+const streamWriteBufferSize = 4096
 
 // Stream handles GET /stream — the main audio stream endpoint.
 type Stream struct {
@@ -43,14 +39,35 @@ type Stream struct {
 }
 
 func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Check if client wants ICY metadata
 	wantMeta := r.Header.Get("Icy-MetaData") == "1"
+	ctx := r.Context()
+	ip := clientIP(r)
 
-	// Set response headers
+	// Reserve capacity before committing an audio response. Otherwise a full
+	// station would append a text error to an already-started MP3 stream.
+	info := broadcast.ListenerInfo{IP: ip}
+	if s.GeoDB != nil {
+		loc := s.GeoDB.Lookup(ip)
+		info.Country = loc.Country
+		info.CountryCode = loc.CountryCode
+		info.City = loc.City
+		info.Latitude = loc.Latitude
+		info.Longitude = loc.Longitude
+	}
+	listener, err := s.Hub.AddListener(wantMeta, info)
+	if err != nil {
+		http.Error(w, "Server Full", http.StatusServiceUnavailable)
+		return
+	}
+	defer s.Hub.RemoveListener(listener)
+
 	h := w.Header()
 	h.Set("Content-Type", "audio/mpeg")
 	h.Set("Cache-Control", "no-cache, no-store")
 	h.Set("Connection", "close")
+	// Go treats "identity" as a close-delimited response and removes this
+	// sentinel from the wire. Raw ICY clients must not see HTTP chunk markers.
+	h.Set("Transfer-Encoding", "identity")
 	h.Set("icy-name", s.Name)
 	h.Set("icy-genre", s.Genre)
 	h.Set("icy-pub", "1")
@@ -58,11 +75,12 @@ func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if s.URL != "" {
 		h.Set("icy-url", s.URL)
 	}
-	if s.Hub.Bitrate > 0 {
-		h.Set("icy-br", strconv.Itoa(s.Hub.Bitrate))
+	bitrate, sampleRate := s.Hub.StreamProperties()
+	if bitrate > 0 {
+		h.Set("icy-br", strconv.Itoa(bitrate))
 	}
-	if s.Hub.SampleRate > 0 {
-		h.Set("icy-sr", strconv.Itoa(s.Hub.SampleRate))
+	if sampleRate > 0 {
+		h.Set("icy-sr", strconv.Itoa(sampleRate))
 	}
 
 	if wantMeta {
@@ -75,9 +93,6 @@ func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
 	}
-
-	ctx := r.Context()
-	ip := clientIP(r)
 
 	// Create ICY writer (reused across intro + broadcast for correct byte alignment)
 	var writer *icy.Writer
@@ -109,38 +124,16 @@ func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Build listener info from client IP and optional geo lookup
-	info := broadcast.ListenerInfo{IP: ip}
-	if s.GeoDB != nil {
-		loc := s.GeoDB.Lookup(ip)
-		info.Country = loc.Country
-		info.CountryCode = loc.CountryCode
-		info.City = loc.City
-		info.Latitude = loc.Latitude
-		info.Longitude = loc.Longitude
-	}
-
-	// Register listener and join live broadcast
-	listener, err := s.Hub.AddListener(wantMeta, info)
-	if err != nil {
-		http.Error(w, "Server Full", http.StatusServiceUnavailable)
-		return
-	}
-	defer s.Hub.RemoveListener(listener)
-
 	// Stream audio from ring buffer
 	ring := s.Hub.Ring()
+	// The ring may advance while a per-listener intro plays. Join from a fresh,
+	// frame-aligned preroll rather than the stale position reserved above.
+	listener.SetPos(ring.PrerollPos())
 	buf := make([]byte, streamWriteBufferSize)
 	var lastTitle string
 
 	flusher, _ := w.(http.Flusher)
 	rc := http.NewResponseController(w)
-
-	// Batch writes instead of flushing every MP3 frame, while keeping the
-	// delivery cadence below typical client output-buffer sizes. At 128 kbps,
-	// 1 KB is about 64 ms of audio.
-	unflushed := 0
-	lastFlush := time.Now()
 
 	for {
 		select {
@@ -149,19 +142,23 @@ func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 		}
 
-		n, newPos, err := ring.Read(listener.Pos(), buf)
+		n, newPos, track, err := ring.Read(ctx, listener.Pos(), buf)
 		if err != nil {
-			slog.Debug("listener read error", "id", listener.ID, "error", err)
+			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
+				slog.Debug("listener read error", "id", listener.ID, "error", err)
+			}
 			return
 		}
 		listener.SetPos(newPos)
 
 		// Give slow clients a generous deadline, but don't block forever.
-		rc.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		writeTimeout := s.Hub.ListenerWriteTimeout(listener.Pos())
+		if err := rc.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			return
+		}
 
 		// Update metadata if track changed
 		if wantMeta {
-			track := s.Hub.CurrentTrack()
 			title := track.Title
 			if track.Artist != "" {
 				title = track.Artist + " - " + track.Title
@@ -171,41 +168,36 @@ func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				lastTitle = title
 			}
 
-			if _, err := writer.Write(buf[:n]); err != nil {
+			if written, err := writer.Write(buf[:n]); err != nil || written != n {
 				return
 			}
 		} else {
-			if _, err := w.Write(buf[:n]); err != nil {
+			if written, err := w.Write(buf[:n]); err != nil || written != n {
 				return
 			}
 		}
 
-		unflushed += n
-		if flusher != nil && (unflushed >= streamFlushBytes || time.Since(lastFlush) >= streamFlushInterval) {
+		// Ring writes are frame-paced. Flush each read so a final frame cannot
+		// remain buffered indefinitely when the producer pauses.
+		if flusher != nil {
 			flusher.Flush()
-			unflushed = 0
-			lastFlush = time.Now()
 		}
 	}
 }
 
-// playIntro streams the intro MP3 directly to the client at real-time speed.
+// playIntro normalizes and streams the intro to the client at real-time speed.
 // Returns true if intro completed (or was skipped due to error), false if client disconnected.
 func (s *Stream) playIntro(ctx context.Context, w http.ResponseWriter, writer *icy.Writer) bool {
-	var (
-		src io.ReadCloser
-		err error
-	)
-	if transcode.NeedsTranscode(s.IntroFile) {
-		src, err = transcode.NewReader(ctx, s.IntroFile)
-	} else {
-		src, err = os.Open(s.IntroFile)
-	}
+	src, err := transcode.NewReader(ctx, s.IntroFile)
 	if err != nil {
 		slog.Warn("cannot open intro file, skipping", "path", s.IntroFile, "error", err)
 		return true
 	}
-	defer src.Close()
+	defer func() {
+		if err := src.Close(); err != nil && ctx.Err() == nil {
+			slog.Debug("cannot close intro decoder", "path", s.IntroFile, "error", err)
+		}
+	}()
 
 	reader, err := mp3frame.NewReader(src)
 	if err != nil {
@@ -217,11 +209,16 @@ func (s *Stream) playIntro(ctx context.Context, w http.ResponseWriter, writer *i
 		writer.SetMeta("Station Intro")
 	}
 
-	// No real-time throttle for the intro: TCP backpressure naturally
-	// rate-limits delivery, and blasting frames gets the listener to the
-	// live broadcast faster.  Per-frame Flush is unnecessary here — the
-	// tight read loop fills the 4KB ResponseWriter buffer in microseconds,
-	// triggering auto-flush.
+	flusher, _ := w.(http.Flusher)
+	rc := http.NewResponseController(w)
+	epoch := time.Now()
+	totalSamples := int64(0)
+	throttle := time.NewTimer(0)
+	if !throttle.Stop() {
+		<-throttle.C
+	}
+	defer throttle.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -231,20 +228,43 @@ func (s *Stream) playIntro(ctx context.Context, w http.ResponseWriter, writer *i
 
 		frame, err := reader.ReadFrame()
 		if err != nil {
-			// Flush any remaining intro data before joining live broadcast.
-			if flusher, ok := w.(http.Flusher); ok {
+			if !errors.Is(err, io.EOF) && ctx.Err() == nil {
+				slog.Warn("intro decode ended with an error", "path", s.IntroFile, "error", err)
+			}
+			if flusher != nil {
 				flusher.Flush()
 			}
-			return true // end of intro or read error — proceed to broadcast
+			return true
 		}
 
-		// Write frame to client
+		if err := rc.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			return false
+		}
+
 		if writer != nil {
-			if _, err := writer.Write(frame.Data); err != nil {
+			if written, err := writer.Write(frame.Data); err != nil || written != len(frame.Data) {
 				return false
 			}
 		} else {
-			if _, err := w.Write(frame.Data); err != nil {
+			if written, err := w.Write(frame.Data); err != nil || written != len(frame.Data) {
+				return false
+			}
+		}
+
+		if flusher != nil {
+			flusher.Flush()
+		}
+
+		totalSamples += int64(frame.Samples)
+		rate := int64(frame.SampleRate)
+		elapsed := time.Duration(totalSamples/rate)*time.Second +
+			time.Duration(totalSamples%rate)*time.Second/time.Duration(rate)
+		deadline := epoch.Add(elapsed)
+		if wait := time.Until(deadline); wait > 0 {
+			throttle.Reset(wait)
+			select {
+			case <-throttle.C:
+			case <-ctx.Done():
 				return false
 			}
 		}

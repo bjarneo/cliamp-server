@@ -8,6 +8,8 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+const minBufferSizeKB = 64
+
 type ServerConfig struct {
 	Host string `toml:"host"`
 	Port int    `toml:"port"`
@@ -22,11 +24,11 @@ type StationConfig struct {
 	Shuffle     bool   `toml:"shuffle"`
 	Recursive   bool   `toml:"recursive"`
 
-	// Intro: single MP3 played once at station startup
+	// Intro: single audio file played once when a listener connects
 	IntroFile string `toml:"intro_file"`
 
-	// Ads: MP3 files injected between songs
-	AdsPath      string `toml:"ads_path"`
+	// Ads: audio files injected between songs
+	AdsPath       string `toml:"ads_path"`
 	AdEveryNSongs int    `toml:"ad_every_n_songs"`
 	AdEveryNMins  int    `toml:"ad_every_n_minutes"`
 	AdShuffle     bool   `toml:"ad_shuffle"`
@@ -35,7 +37,7 @@ type StationConfig struct {
 type StreamConfig struct {
 	MetaInt      int `toml:"metaint"`
 	BufferSize   int `toml:"buffer_size"`
-	MaxListeners int `toml:"max_listeners"` // 0 = unlimited
+	MaxListeners int `toml:"max_listeners"`  // 0 = unlimited
 	IntroSeenTTL int `toml:"intro_seen_ttl"` // Hours before intro replays for same IP (default 48)
 }
 
@@ -170,8 +172,8 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("metaint must be at least 256 bytes")
 	}
 
-	if c.Stream.BufferSize < 64 {
-		return fmt.Errorf("buffer_size must be at least 64 KB")
+	if c.Stream.BufferSize < minBufferSizeKB {
+		return fmt.Errorf("buffer_size must be at least %d KB", minBufferSizeKB)
 	}
 
 	if c.Geo.DBPath != "" {

@@ -7,12 +7,12 @@ type Frame struct {
 	Header     [4]byte
 	Data       []byte // Full frame bytes including header
 	Version    int    // 1=MPEG1, 2=MPEG2, 25=MPEG2.5
-	Layer      int    // 1, 2, or 3
+	Layer      int    // Layer III (3)
 	Bitrate    int    // kbps
 	SampleRate int    // Hz
 	Padding    bool
-	FrameSize  int    // Total frame size in bytes
-	Samples    int    // Samples per frame
+	FrameSize  int // Total frame size in bytes
+	Samples    int // Samples per frame
 }
 
 // MPEG1 Layer III bitrate table (index 0 = free, index 15 = bad)
@@ -58,18 +58,16 @@ func ParseHeader(h [4]byte) (Frame, error) {
 		return Frame{}, fmt.Errorf("reserved MPEG version")
 	}
 
-	// Layer: bits 2-1 of byte 1
+	// Layer: bits 2-1 of byte 1. The bitrate tables and streaming pipeline
+	// intentionally support Layer III only.
 	layerBits := (h[1] >> 1) & 0x03
-	switch layerBits {
-	case 1:
-		f.Layer = 3
-	case 2:
-		f.Layer = 2
-	case 3:
-		f.Layer = 1
-	default:
+	if layerBits == 0 {
 		return Frame{}, fmt.Errorf("reserved layer")
 	}
+	if layerBits != 1 {
+		return Frame{}, fmt.Errorf("unsupported MPEG layer: %d", 4-layerBits)
+	}
+	f.Layer = 3
 
 	// Bitrate: bits 7-4 of byte 2
 	brIndex := (h[2] >> 4) & 0x0F
@@ -93,9 +91,7 @@ func ParseHeader(h [4]byte) (Frame, error) {
 	f.Padding = (h[2]>>1)&0x01 == 1
 
 	// Samples per frame
-	if f.Layer == 1 {
-		f.Samples = 384
-	} else if f.Layer == 3 && f.Version != 1 {
+	if f.Version != 1 {
 		f.Samples = 576 // MPEG2/2.5 Layer III
 	} else {
 		f.Samples = 1152
@@ -104,17 +100,13 @@ func ParseHeader(h [4]byte) (Frame, error) {
 	// Frame size calculation
 	pad := 0
 	if f.Padding {
-		if f.Layer == 1 {
-			pad = 4
-		} else {
-			pad = 1
-		}
+		pad = 1
 	}
 
-	if f.Layer == 1 {
-		f.FrameSize = (12*f.Bitrate*1000/f.SampleRate + pad) * 4
-	} else {
+	if f.Version == 1 {
 		f.FrameSize = 144*f.Bitrate*1000/f.SampleRate + pad
+	} else {
+		f.FrameSize = 72*f.Bitrate*1000/f.SampleRate + pad
 	}
 
 	return f, nil

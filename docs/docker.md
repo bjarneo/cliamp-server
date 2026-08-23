@@ -40,8 +40,8 @@ docker run -d \
 | `/config/cliamp-server/config.toml` | TOML config file | Only without `--music` |
 | `/music/...` | Audio file directories | Yes |
 | GeoIP `.mmdb` path | MaxMind database | No |
-| Ads directory path | Ad MP3 files | No |
-| Intro file path | Station intro MP3 | No |
+| Ads directory path | Ad audio files | No |
+| Intro file path | Station intro audio | No |
 
 ## Nginx Reverse Proxy
 
@@ -67,6 +67,7 @@ server {
         proxy_buffering off;
         proxy_request_buffering off;
         proxy_max_temp_file_size 0;
+        chunked_transfer_encoding off;
 
         # no timeout on long-lived stream connections
         proxy_read_timeout 24h;

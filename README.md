@@ -8,6 +8,8 @@ Looking for the client? See [cliamp](https://github.com/bjarneo/cliamp).
 
 ## Quick Start
 
+Requires `ffmpeg` with `libmp3lame` on `PATH`.
+
 ```
 go build
 ./cliamp-server --music /path/to/your/mp3s

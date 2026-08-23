@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
@@ -65,6 +66,10 @@ func main() {
 	// Validate config
 	if err := cfg.Validate(); err != nil {
 		slog.Error("invalid config", "error", err)
+		os.Exit(1)
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		slog.Error("ffmpeg is required", "error", err)
 		os.Exit(1)
 	}
 

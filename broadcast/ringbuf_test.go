@@ -1,19 +1,25 @@
 package broadcast
 
 import (
+	"bytes"
+	"context"
+	"errors"
+	"io"
 	"sync"
 	"testing"
+	"time"
 
 	"cliamp-server/library"
 )
 
 func TestRingBufferConcurrentReaders(t *testing.T) {
 	const (
-		numReaders = 100
-		numFrames  = 500
-		frameSize  = 417 // typical MP3 frame at 128kbps
+		numReaders       = 100
+		additionalFrames = 500
+		totalFrames      = additionalFrames + 1
+		frameSize        = 417 // typical MP3 frame at 128kbps
 	)
-	rb := NewRingBuffer(numFrames * frameSize)
+	rb := NewRingBuffer(totalFrames * frameSize)
 
 	// Write a frame to get an initial position.
 	frame := make([]byte, frameSize)
@@ -35,8 +41,8 @@ func TestRingBufferConcurrentReaders(t *testing.T) {
 			pos := startPos
 			totalRead := 0
 
-			for totalRead < numFrames*frameSize {
-				n, newPos, err := rb.Read(pos, buf)
+			for totalRead < totalFrames*frameSize {
+				n, newPos, _, err := rb.Read(t.Context(), pos, buf)
 				if err != nil {
 					t.Errorf("read error at pos %d: %v", pos, err)
 					return
@@ -51,12 +57,120 @@ func TestRingBufferConcurrentReaders(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < numFrames; i++ {
+		for i := 0; i < additionalFrames; i++ {
 			rb.Write(frame)
 		}
 	}()
 
 	wg.Wait()
+}
+
+func TestRingBufferPrerollUsesOldestRetainedFrame(t *testing.T) {
+	rb := NewRingBuffer(50)
+	for range 10 {
+		rb.Write(make([]byte, 10))
+	}
+
+	if got := rb.PrerollPos(); got != 50 {
+		t.Fatalf("PrerollPos() = %d, want 50", got)
+	}
+}
+
+func TestRingBufferReadStopsAtTrackTransition(t *testing.T) {
+	rb := NewRingBuffer(64)
+	first := TrackInfo{Title: "First"}
+	second := TrackInfo{Title: "Second"}
+	rb.WriteFrame([]byte("aaaa"), &first)
+	rb.Write([]byte("bbbb"))
+	rb.WriteFrame([]byte("cccc"), &second)
+
+	buf := make([]byte, 32)
+	n, pos, track, err := rb.Read(t.Context(), 0, buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 8 || pos != 8 || track != first || !bytes.Equal(buf[:n], []byte("aaaabbbb")) {
+		t.Fatalf("first read = (%d, %d, %+v, %q), want (8, 8, %+v, %q)", n, pos, track, buf[:n], first, "aaaabbbb")
+	}
+
+	n, pos, track, err = rb.Read(t.Context(), pos, buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 4 || pos != 12 || track != second || !bytes.Equal(buf[:n], []byte("cccc")) {
+		t.Fatalf("second read = (%d, %d, %+v, %q), want (4, 12, %+v, %q)", n, pos, track, buf[:n], second, "cccc")
+	}
+}
+
+func TestRingBufferReadCanBeCanceled(t *testing.T) {
+	rb := NewRingBuffer(64)
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() {
+		_, _, _, err := rb.Read(ctx, 0, make([]byte, 16))
+		done <- err
+	}()
+
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Read() error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Read did not return after cancellation")
+	}
+}
+
+func TestRingBufferCloseWakesReader(t *testing.T) {
+	rb := NewRingBuffer(64)
+	done := make(chan error, 1)
+	go func() {
+		_, _, _, err := rb.Read(t.Context(), 0, make([]byte, 16))
+		done <- err
+	}()
+
+	rb.Close()
+	select {
+	case err := <-done:
+		if !errors.Is(err, io.EOF) {
+			t.Fatalf("Read() error = %v, want io.EOF", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Read did not return after close")
+	}
+}
+
+func TestHubListenerWriteTimeoutFitsRingRetention(t *testing.T) {
+	tests := []struct {
+		name         string
+		bufferSizeKB int
+		want         time.Duration
+	}{
+		{name: "minimum buffer", bufferSizeKB: 64, want: 3596 * time.Millisecond},
+		{name: "default buffer", bufferSizeKB: 512, want: 10 * time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hub := NewHub("test", nil, tt.bufferSizeKB, 0)
+			if got := hub.ListenerWriteTimeout(0); got != tt.want {
+				t.Fatalf("ListenerWriteTimeout() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHubListenerWriteTimeoutAccountsForPrerollLag(t *testing.T) {
+	hub := NewHub("test", nil, 64, 0)
+	frame := make([]byte, 417)
+	for range prerollFrames {
+		hub.ring.Write(frame)
+	}
+
+	if got, want := hub.ListenerWriteTimeout(hub.ring.PrerollPos()), 260*time.Millisecond; got != want {
+		t.Fatalf("ListenerWriteTimeout() = %v, want %v", got, want)
+	}
 }
 
 func TestRingBufferErrFull(t *testing.T) {

@@ -46,8 +46,6 @@ func Scan(root string, recursive bool) ([]Track, error) {
 		f, err := os.Open(path)
 		if err != nil {
 			slog.Warn("scanner: cannot open file", "path", path, "error", err)
-			track.Title = titleFromFilename(d.Name())
-			tracks = append(tracks, track)
 			return nil
 		}
 		defer f.Close()

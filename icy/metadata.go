@@ -1,5 +1,14 @@
 package icy
 
+import "unicode/utf8"
+
+const (
+	maxMetaPayload = 255 * 16
+	metaPrefix     = "StreamTitle='"
+	metaSuffix     = "';"
+	maxTitleBytes  = maxMetaPayload - len(metaPrefix) - len(metaSuffix)
+)
+
 // BuildMeta creates an ICY metadata block for the given stream title.
 // If title is empty, returns a single null byte (no metadata).
 func BuildMeta(title string) []byte {
@@ -7,7 +16,13 @@ func BuildMeta(title string) []byte {
 		return []byte{0x00}
 	}
 
-	payload := "StreamTitle='" + title + "';"
+	if len(title) > maxTitleBytes {
+		title = title[:maxTitleBytes]
+		for !utf8.ValidString(title) {
+			title = title[:len(title)-1]
+		}
+	}
+	payload := metaPrefix + title + metaSuffix
 
 	// Pad to 16-byte boundary
 	padded := len(payload)

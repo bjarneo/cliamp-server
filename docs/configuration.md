@@ -15,8 +15,8 @@ There are two ways to configure cliamp-server: CLI flags for a quick single stat
 | `--shuffle` | Enable shuffle mode | on |
 | `--no-shuffle` | Disable shuffle mode | |
 | `--name <name>` | Station name | "cliamp radio" |
-| `--intro <path>` | Intro MP3 played once when a listener connects | |
-| `--ads <path>` | Ads directory or single MP3 file | |
+| `--intro <path>` | Intro audio played once when a listener connects | |
+| `--ads <path>` | Ads directory or single audio file | |
 | `--ad-every-songs <n>` | Insert an ad after every N songs | 0 (off) |
 | `--ad-every-minutes <n>` | Insert an ad after every N minutes | 0 (off) |
 | `--password <token>` | Admin password for /status endpoints | |
@@ -35,7 +35,7 @@ port = 8000
 
 [stream]
 metaint = 8192       # ICY metadata interval in bytes
-buffer_size = 512    # Ring buffer size in KB (512 ~ 32s of 128kbps audio)
+buffer_size = 512    # Ring buffer size in KB (minimum 64; 512 ~ 32s at 128kbps)
 intro_seen_ttl = 48  # Hours before intro replays for the same IP (default 48)
 
 [admin]
@@ -84,8 +84,8 @@ Every station supports these fields:
 | `path` | string | **Required.** Directory containing audio files |
 | `shuffle` | bool | Randomize playback order |
 | `recursive` | bool | Scan subdirectories for audio files |
-| `intro_file` | string | MP3 played once per listener before joining the live broadcast |
-| `ads_path` | string | Directory of ad MP3 files (or a single file) |
+| `intro_file` | string | Audio played once per listener before joining the live broadcast |
+| `ads_path` | string | Directory of ad audio files (or a single file) |
 | `ad_every_n_songs` | int | Play an ad after every N music tracks |
 | `ad_every_n_minutes` | int | Play an ad after every N minutes |
 | `ad_shuffle` | bool | Randomize ad selection order |

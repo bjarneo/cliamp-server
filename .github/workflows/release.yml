@@ -34,8 +34,8 @@ jobs:
           CGO_ENABLED: "0"
         run: |
           BINARY="cliamp-server-${GOOS}-${GOARCH}"
-          VERSION="${GITHUB_REF#refs/tags/}"
-          go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "$BINARY" .
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          go build -trimpath -ldflags="-s -w -X cliamp-server/config.Version=${VERSION}" -o "$BINARY" .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

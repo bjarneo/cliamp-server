@@ -34,7 +34,7 @@ type AdPool struct {
 
 // NewAdPool creates an ad pool from a path (file or directory).
 // If path is a single file, the pool contains that one track.
-// If path is a directory, all .mp3 files in it (non-recursive) are loaded.
+// If path is a directory, supported audio files in it (non-recursive) are loaded.
 // Returns an error if the directory is empty or the path is invalid.
 func NewAdPool(path string, shuffle bool) (*AdPool, error) {
 	info, err := os.Stat(path)
@@ -45,7 +45,10 @@ func NewAdPool(path string, shuffle bool) (*AdPool, error) {
 	var tracks []library.Track
 
 	if !info.IsDir() {
-		// Single file
+		ext := strings.ToLower(filepath.Ext(path))
+		if !audioExtensions[ext] {
+			return nil, fmt.Errorf("unsupported ad file %q", path)
+		}
 		tracks = append(tracks, library.Track{
 			Path:  path,
 			Title: "Ad",
