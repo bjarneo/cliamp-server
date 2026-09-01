@@ -10,7 +10,7 @@ import (
 	_ "github.com/ncruces/go-sqlite3/embed"
 )
 
-const statsCacheTTL = 30 * time.Second
+const statsCacheTTL = time.Minute
 
 // DB wraps a SQLite database for persisting listener session statistics.
 type DB struct {
