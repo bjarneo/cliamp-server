@@ -131,6 +131,7 @@ func main() {
 			Hub:        hub,
 			Config:     stCfg,
 			TrackCount: pl.Len(),
+			Tracks:     tracks,
 		}
 	}
 

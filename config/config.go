@@ -24,6 +24,11 @@ type StationConfig struct {
 	Shuffle     bool   `toml:"shuffle"`
 	Recursive   bool   `toml:"recursive"`
 
+	// ExposeTracks publishes the station's library as individual files at
+	// /{station}/tracks. Off by default: streaming a library and offering it
+	// as downloads are different things, so an operator must opt in per station.
+	ExposeTracks bool `toml:"expose_tracks"`
+
 	// Intro: single audio file played once when a listener connects
 	IntroFile string `toml:"intro_file"`
 

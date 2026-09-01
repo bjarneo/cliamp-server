@@ -32,7 +32,6 @@ type GlobalPlaylistPLS struct {
 }
 
 func (g *GlobalPlaylistPLS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "audio/x-scpls")
 	w.Header().Set("Content-Disposition", "inline; filename=\"streams.pls\"")
 

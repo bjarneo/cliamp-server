@@ -32,7 +32,6 @@ type GlobalPlaylistM3U struct {
 }
 
 func (g *GlobalPlaylistM3U) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "audio/x-mpegurl")
 	w.Header().Set("Content-Disposition", "inline; filename=\"streams.m3u\"")
 

@@ -29,6 +29,12 @@ url = ""
 path = "/music/pop"
 shuffle = true
 recursive = true
+# expose_tracks = true                        # Publish the library as individual
+                                              # files: /pop/tracks (JSON index),
+                                              # /pop/tracks.m3u, /pop/tracks/{id}.
+                                              # Off by default; streaming a library
+                                              # and offering it for download are
+                                              # different things, so opt in per station.
 # intro_file = "/radio/assets/intro.mp3"     # Audio played once per listener
 # ads_path = "/radio/ads"                     # Directory of ads (or single audio file)
 # ad_every_n_songs = 5                        # Inject ad after every N songs (0 = off)

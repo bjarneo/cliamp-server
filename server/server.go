@@ -12,14 +12,50 @@ import (
 	"cliamp-server/config"
 	"cliamp-server/geo"
 	"cliamp-server/handler"
+	"cliamp-server/library"
 	"cliamp-server/stats"
 )
+
+// CORS policy. Every route this server exposes is read-only and
+// unauthenticated, so a wildcard origin is safe. Access-Control-Allow-Credentials
+// is deliberately never set: pairing it with "*" is what turns a public read
+// API into a credential-leaking one, and browsers reject the combination.
+const (
+	corsMethods = "GET, HEAD, OPTIONS"
+	corsHeaders = "Range, Icy-MetaData"
+	// Browsers hide response headers from cross-origin JavaScript unless the
+	// server names them here. Content-Range is what lets a web player seek.
+	corsExpose = "Content-Length, Content-Range, Accept-Ranges, " +
+		"Icy-Name, Icy-Genre, Icy-Br, Icy-Sr, Icy-Metaint, Icy-Pub, Icy-Url"
+	corsMaxAge = "86400"
+)
+
+// withCORS answers cross-origin preflights and tags every response so browser
+// clients can read the API, the playlists and the audio itself.
+func withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Access-Control-Allow-Origin", "*")
+		h.Set("Access-Control-Expose-Headers", corsExpose)
+
+		if r.Method == http.MethodOptions {
+			h.Set("Access-Control-Allow-Methods", corsMethods)
+			h.Set("Access-Control-Allow-Headers", corsHeaders)
+			h.Set("Access-Control-Max-Age", corsMaxAge)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
 
 // Station holds the per-station runtime state.
 type Station struct {
 	Hub        *broadcast.Hub
 	Config     config.StationConfig
 	TrackCount int
+	Tracks     []library.Track
 }
 
 // Server wraps the HTTP server and route configuration.
@@ -80,6 +116,20 @@ func New(cfg *config.Config, stations map[string]*Station, geoDB *geo.DB, statsD
 				StatsDB: statsDB,
 				Station: id,
 			})
+		}
+
+		if st.Config.ExposeTracks {
+			idx := handler.NewTrackIndex(id, st.Config.Name, st.Tracks)
+
+			mux.Handle(prefix+"/tracks", &handler.TracksJSON{Index: idx})
+			mux.Handle(prefix+"/tracks.m3u", &handler.TracksM3U{Index: idx})
+			mux.Handle("GET "+prefix+"/tracks/{id}", &handler.TrackFile{Index: idx})
+
+			slog.Info("track listing exposed",
+				"station", id,
+				"tracks", idx.Len(),
+				"prefix", prefix+"/tracks",
+			)
 		}
 
 		slog.Info("station registered",
@@ -143,7 +193,7 @@ func New(cfg *config.Config, stations map[string]*Station, geoDB *geo.DB, statsD
 
 	s.httpServer = &http.Server{
 		Addr:              fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
-		Handler:           mux,
+		Handler:           withCORS(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
