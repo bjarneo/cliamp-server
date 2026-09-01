@@ -121,9 +121,9 @@ func New(cfg *config.Config, stations map[string]*Station, geoDB *geo.DB, statsD
 		if st.Config.ExposeTracks {
 			idx := handler.NewTrackIndex(id, st.Config.Name, st.Tracks)
 
-			mux.Handle(prefix+"/tracks", &handler.TracksJSON{Index: idx})
+			mux.Handle(prefix+"/tracks", &handler.TracksJSON{Index: idx, StatsDB: statsDB})
 			mux.Handle(prefix+"/tracks.m3u", &handler.TracksM3U{Index: idx})
-			mux.Handle("GET "+prefix+"/tracks/{id}", &handler.TrackFile{Index: idx})
+			mux.Handle("GET "+prefix+"/tracks/{id}", &handler.TrackFile{Index: idx, StatsDB: statsDB})
 
 			slog.Info("track listing exposed",
 				"station", id,

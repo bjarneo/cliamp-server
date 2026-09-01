@@ -177,6 +177,42 @@ func TestRecordInvalidatesStationStatsCache(t *testing.T) {
 	}
 }
 
+func TestTrackPlayCounts(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "stats.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	for _, play := range []struct {
+		station string
+		trackID string
+	}{
+		{station: "lofi", trackID: "first"},
+		{station: "lofi", trackID: "first"},
+		{station: "lofi", trackID: "second"},
+		{station: "jazz", trackID: "first"},
+	} {
+		if err := db.RecordTrackPlay(play.station, play.trackID); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := db.TrackPlayCounts("lofi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["first"] != 2 {
+		t.Errorf("first plays = %d, want 2", got["first"])
+	}
+	if got["second"] != 1 {
+		t.Errorf("second plays = %d, want 1", got["second"])
+	}
+	if len(got) != 2 {
+		t.Errorf("TrackPlayCounts() returned %d tracks, want 2", len(got))
+	}
+}
+
 func TestOpenBackfillsListenerPeaks(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "stats.db")
 	legacy, err := sql.Open("sqlite3", path)

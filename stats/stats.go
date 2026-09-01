@@ -77,6 +77,16 @@ func Open(path string) (*DB, error) {
 		db.Close()
 		return nil, err
 	}
+	const trackPlaySchema = `CREATE TABLE IF NOT EXISTS track_plays (
+		station TEXT    NOT NULL,
+		track_id TEXT   NOT NULL,
+		plays    INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (station, track_id)
+	)`
+	if _, err := db.Exec(trackPlaySchema); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := backfillListenerPeaks(db); err != nil {
 		db.Close()
 		return nil, err
@@ -134,6 +144,40 @@ func (d *DB) Record(s Session) error {
 	delete(d.cache, s.Station)
 	d.cacheMu.Unlock()
 	return nil
+}
+
+// RecordTrackPlay increments the play count for one station track.
+func (d *DB) RecordTrackPlay(station, trackID string) error {
+	_, err := d.db.Exec(
+		`INSERT INTO track_plays (station, track_id, plays) VALUES (?, ?, 1)
+		 ON CONFLICT(station, track_id) DO UPDATE SET plays = plays + 1`,
+		station,
+		trackID,
+	)
+	return err
+}
+
+// TrackPlayCounts returns all recorded track play counts for a station.
+func (d *DB) TrackPlayCounts(station string) (map[string]int64, error) {
+	rows, err := d.db.Query(
+		`SELECT track_id, plays FROM track_plays WHERE station = ?`,
+		station,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int64)
+	for rows.Next() {
+		var trackID string
+		var plays int64
+		if err := rows.Scan(&trackID, &plays); err != nil {
+			return nil, err
+		}
+		counts[trackID] = plays
+	}
+	return counts, rows.Err()
 }
 
 // StationStatsResult holds aggregated statistics for a single station.

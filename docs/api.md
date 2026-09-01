@@ -16,6 +16,18 @@ The stream endpoint supports ICY metadata. Clients that send the `Icy-MetaData: 
 
 Response headers include `icy-name`, `icy-genre`, `icy-br` (bitrate), `icy-sr` (sample rate), and `icy-metaint` (metadata interval).
 
+## Track Endpoints
+
+Available for stations configured with `expose_tracks = true`.
+
+| Endpoint | Description |
+|----------|-------------|
+| `/<id>/tracks` | JSON library listing with a persistent `plays` count for each track |
+| `/<id>/tracks.m3u` | M3U playlist containing every track |
+| `/<id>/tracks/<track-id>` | Direct audio file with range request support |
+
+Play counts require `--stats-db`. A play is counted when a `GET` request starts at byte 0; `HEAD` requests and seeks into the middle of a track are excluded. Without a statistics database, every track reports `"plays": 0`.
+
 ## Status Endpoints
 
 | Endpoint | Description |

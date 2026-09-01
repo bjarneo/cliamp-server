@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"mime"
 	"net/http"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"strings"
 
 	"cliamp-server/library"
+	"cliamp-server/stats"
 )
 
 // audioMIME covers the extensions the library scanner accepts but that the
@@ -38,6 +40,7 @@ type TrackEntry struct {
 	Duration float64 `json:"duration,omitempty"`
 	Filename string  `json:"filename"`
 	URL      string  `json:"url"`
+	Plays    int64   `json:"plays"`
 }
 
 // TrackIndex holds the per-station track listing and the id-to-path lookup
@@ -112,11 +115,12 @@ func baseURL(r *http.Request) string {
 }
 
 // withURLs returns the entries with absolute URLs filled in for this request.
-func (idx *TrackIndex) withURLs(r *http.Request) []TrackEntry {
+func (idx *TrackIndex) withURLs(r *http.Request, playCounts map[string]int64) []TrackEntry {
 	base := baseURL(r) + "/" + idx.StationID + "/tracks/"
 	out := make([]TrackEntry, len(idx.entries))
 	for i, e := range idx.entries {
 		e.URL = base + e.ID
+		e.Plays = playCounts[e.ID]
 		out[i] = e
 	}
 	return out
@@ -124,11 +128,21 @@ func (idx *TrackIndex) withURLs(r *http.Request) []TrackEntry {
 
 // TracksJSON handles GET /{station}/tracks - the track listing.
 type TracksJSON struct {
-	Index *TrackIndex
+	Index   *TrackIndex
+	StatsDB *stats.DB
 }
 
 func (h *TracksJSON) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	entries := h.Index.withURLs(r)
+	var playCounts map[string]int64
+	if h.StatsDB != nil {
+		var err error
+		playCounts, err = h.StatsDB.TrackPlayCounts(h.Index.StationID)
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+	}
+	entries := h.Index.withURLs(r, playCounts)
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
@@ -154,7 +168,7 @@ type TracksM3U struct {
 }
 
 func (h *TracksM3U) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	entries := h.Index.withURLs(r)
+	entries := h.Index.withURLs(r, nil)
 
 	w.Header().Set("Content-Type", "audio/x-mpegurl")
 	w.Header().Set("Content-Disposition", "inline; filename=\"tracks.m3u\"")
@@ -177,7 +191,8 @@ func (h *TracksM3U) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // TrackFile handles GET /{station}/tracks/{id} - one audio file.
 type TrackFile struct {
-	Index *TrackIndex
+	Index   *TrackIndex
+	StatsDB *stats.DB
 }
 
 func (h *TrackFile) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -220,8 +235,24 @@ func (h *TrackFile) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition",
 		fmt.Sprintf("inline; filename*=UTF-8''%s", urlEncode(filepath.Base(path))))
 
+	if h.StatsDB != nil && isTrackPlayRequest(r) {
+		if err := h.StatsDB.RecordTrackPlay(h.Index.StationID, id); err != nil {
+			slog.Error("failed to record track play", "station", h.Index.StationID, "track_id", id, "error", err)
+		}
+	}
+
 	// ServeContent handles Range requests, If-Modified-Since and Content-Length.
 	http.ServeContent(w, r, filepath.Base(path), fi.ModTime(), f)
+}
+
+// isTrackPlayRequest excludes HEAD requests and seeks into the middle of a
+// track from the play count.
+func isTrackPlayRequest(r *http.Request) bool {
+	if r.Method != http.MethodGet {
+		return false
+	}
+	rangeHeader := strings.ToLower(strings.TrimSpace(r.Header.Get("Range")))
+	return rangeHeader == "" || strings.HasPrefix(rangeHeader, "bytes=0-")
 }
 
 // urlEncode percent-encodes a filename for a Content-Disposition header.
