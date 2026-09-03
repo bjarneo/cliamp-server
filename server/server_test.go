@@ -1,0 +1,88 @@
+package server
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"cliamp-server/broadcast"
+	"cliamp-server/config"
+)
+
+func TestLogoEndpoint(t *testing.T) {
+	srv := newTestServer()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "https://radio.example/logo.svg", nil)
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "image/svg+xml" {
+		t.Errorf("Content-Type = %q, want %q", got, "image/svg+xml")
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=86400" {
+		t.Errorf("Cache-Control = %q, want %q", got, "public, max-age=86400")
+	}
+	if !strings.Contains(rec.Header().Get("Access-Control-Expose-Headers"), "Icy-Logo") {
+		t.Error("Access-Control-Expose-Headers does not include Icy-Logo")
+	}
+	if !strings.Contains(rec.Body.String(), "<svg") {
+		t.Error("response does not contain an SVG")
+	}
+}
+
+func TestStatusIncludesLogoURL(t *testing.T) {
+	srv := newTestServer()
+
+	t.Run("station", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "https://radio.example/omarchy/status", nil)
+		srv.httpServer.Handler.ServeHTTP(rec, req)
+
+		var got struct {
+			Favicon string `json:"favicon"`
+		}
+		if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		if want := "https://radio.example/logo.svg"; got.Favicon != want {
+			t.Errorf("favicon = %q, want %q", got.Favicon, want)
+		}
+	})
+
+	t.Run("global", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "https://radio.example/status", nil)
+		srv.httpServer.Handler.ServeHTTP(rec, req)
+
+		var got struct {
+			Stations map[string]struct {
+				Favicon string `json:"favicon"`
+			} `json:"stations"`
+		}
+		if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		if want := "https://radio.example/logo.svg"; got.Stations["omarchy"].Favicon != want {
+			t.Errorf("favicon = %q, want %q", got.Stations["omarchy"].Favicon, want)
+		}
+	})
+}
+
+func newTestServer() *Server {
+	cfg := config.Defaults()
+	cfg.Stations = map[string]config.StationConfig{
+		"omarchy": {Name: "Omarchy"},
+	}
+	cfg.StationOrder = []string{"omarchy"}
+	stations := map[string]*Station{
+		"omarchy": {
+			Hub:    broadcast.NewHub("omarchy", nil, 64, 0),
+			Config: cfg.Stations["omarchy"],
+		},
+	}
+	return New(cfg, stations, nil, nil)
+}

@@ -21,6 +21,7 @@ type Status struct {
 
 type statusResponse struct {
 	Station         string           `json:"station"`
+	Favicon         string           `json:"favicon"`
 	Listeners       int              `json:"listeners"`
 	ListenerDetails []listenerDetail `json:"listener_details"`
 	CurrentTrack    currentTrack     `json:"current_track"`
@@ -61,6 +62,7 @@ func (s *Status) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	resp := statusResponse{
 		Station:         s.StationName,
+		Favicon:         baseURL(r) + LogoPath,
 		Listeners:       s.Hub.ListenerCount(),
 		ListenerDetails: buildListenerDetails(s.Hub.Listeners(), now),
 		CurrentTrack: currentTrack{
@@ -100,6 +102,7 @@ type globalStatusResponse struct {
 
 type stationStatus struct {
 	Name            string           `json:"name"`
+	Favicon         string           `json:"favicon"`
 	Listeners       int              `json:"listeners"`
 	ListenerDetails []listenerDetail `json:"listener_details"`
 	CurrentTrack    currentTrack     `json:"current_track"`
@@ -117,6 +120,7 @@ func (g *GlobalStatus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	uptime := time.Since(g.StartTime)
 	now := time.Now()
+	favicon := baseURL(r) + LogoPath
 	stations := make(map[string]stationStatus, len(g.Stations))
 	totalListeners := 0
 
@@ -127,6 +131,7 @@ func (g *GlobalStatus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		stations[id] = stationStatus{
 			Name:            info.Name,
+			Favicon:         favicon,
 			Listeners:       listeners,
 			ListenerDetails: buildListenerDetails(info.Hub.Listeners(), now),
 			CurrentTrack: currentTrack{

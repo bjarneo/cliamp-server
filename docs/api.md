@@ -11,10 +11,11 @@ Each station exposes three endpoints under its ID prefix:
 | `/<id>/stream.m3u` | `audio/x-mpegurl` | M3U playlist file pointing to the stream |
 | `/streams.pls` | `audio/x-scpls` | PLS playlist file listing all stations |
 | `/streams.m3u` | `audio/x-mpegurl` | M3U playlist file listing all stations |
+| `/logo.svg` | `image/svg+xml` | CLIAMP station logo for players and directory listings |
 
 The stream endpoint supports ICY metadata. Clients that send the `Icy-MetaData: 1` request header receive inline metadata blocks containing the current track title and artist.
 
-Response headers include `icy-name`, `icy-genre`, `icy-br` (bitrate), `icy-sr` (sample rate), and `icy-metaint` (metadata interval).
+Response headers include `icy-name`, `icy-genre`, `icy-br` (bitrate), `icy-sr` (sample rate), and `icy-metaint` (metadata interval). The `icy-logo` extension contains an absolute URL to `/logo.svg`; use the same URL as the station favicon when registering it with a radio directory.
 
 ## Track Endpoints
 
@@ -46,6 +47,7 @@ curl -H "Authorization: Bearer yourpassword" http://localhost:8000/status
 ```json
 {
   "station": "Pop Station",
+  "favicon": "https://radio.example/logo.svg",
   "listeners": 12,
   "listener_details": [
     {
@@ -77,6 +79,7 @@ curl -H "Authorization: Bearer yourpassword" http://localhost:8000/status
   "stations": {
     "pop": {
       "name": "Pop Station",
+      "favicon": "https://radio.example/logo.svg",
       "listeners": 12,
       "listener_details": [],
       "current_track": { "title": "", "artist": "", "album": "" },
@@ -84,6 +87,7 @@ curl -H "Authorization: Bearer yourpassword" http://localhost:8000/status
     },
     "jazz": {
       "name": "Jazz Station",
+      "favicon": "https://radio.example/logo.svg",
       "listeners": 3,
       "listener_details": [],
       "current_track": { "title": "", "artist": "", "album": "" },

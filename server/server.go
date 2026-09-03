@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"log/slog"
 	"net"
@@ -16,6 +17,9 @@ import (
 	"cliamp-server/stats"
 )
 
+//go:embed logo.svg
+var assets embed.FS
+
 // CORS policy. Every route this server exposes is read-only and
 // unauthenticated, so a wildcard origin is safe. Access-Control-Allow-Credentials
 // is deliberately never set: pairing it with "*" is what turns a public read
@@ -26,7 +30,7 @@ const (
 	// Browsers hide response headers from cross-origin JavaScript unless the
 	// server names them here. Content-Range is what lets a web player seek.
 	corsExpose = "Content-Length, Content-Range, Accept-Ranges, " +
-		"Icy-Name, Icy-Genre, Icy-Br, Icy-Sr, Icy-Metaint, Icy-Pub, Icy-Url"
+		"Icy-Name, Icy-Genre, Icy-Br, Icy-Sr, Icy-Metaint, Icy-Pub, Icy-Url, Icy-Logo"
 	corsMaxAge = "86400"
 )
 
@@ -75,6 +79,10 @@ func New(cfg *config.Config, stations map[string]*Station, geoDB *geo.DB, statsD
 	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET "+handler.LogoPath, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		http.ServeFileFS(w, r, assets, "logo.svg")
+	})
 
 	// Per-station routes
 	for id, st := range stations {

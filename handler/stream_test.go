@@ -143,6 +143,38 @@ func TestStreamRejectsFullStationBeforeStartingAudio(t *testing.T) {
 	}
 }
 
+func TestStreamIncludesLogoHeader(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	hub := broadcast.NewHub("test", nil, 64, 0)
+	recorder := newFlushRecorder()
+	req := httptest.NewRequest(http.MethodGet, "http://radio.example/omarchy/stream", nil).WithContext(ctx)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	stream := &Stream{Hub: hub, MetaInt: 8192}
+	done := make(chan struct{})
+	go func() {
+		stream.ServeHTTP(recorder, req)
+		close(done)
+	}()
+
+	select {
+	case <-recorder.flushes:
+	case <-time.After(time.Second):
+		t.Fatal("stream did not flush response headers")
+	}
+	if got, want := recorder.Header().Get("Icy-Logo"), "https://radio.example/logo.svg"; got != want {
+		t.Errorf("Icy-Logo = %q, want %q", got, want)
+	}
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("stream handler did not exit after request cancellation")
+	}
+}
+
 func httpHeaderValue(wantMeta bool) string {
 	if wantMeta {
 		return "with_metadata"

@@ -25,6 +25,9 @@ var introSeen sync.Map
 
 const streamWriteBufferSize = 4096
 
+// LogoPath is the public path of the embedded station logo.
+const LogoPath = "/logo.svg"
+
 // Stream handles GET /stream — the main audio stream endpoint.
 type Stream struct {
 	Hub          *broadcast.Hub
@@ -70,6 +73,7 @@ func (s *Stream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Set("Transfer-Encoding", "identity")
 	h.Set("icy-name", s.Name)
 	h.Set("icy-genre", s.Genre)
+	h.Set("icy-logo", baseURL(r)+LogoPath)
 	h.Set("icy-pub", "1")
 
 	if s.URL != "" {
